@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/theme/app_theme.dart';
 import 'package:traceart/ui/views/workspace_view.dart';
 import 'package:traceart/ui/widgets/alignment_toolbar.dart';
@@ -11,14 +12,17 @@ import '../mocks/fake_services.dart';
 void main() {
   late FakeImagePickerService pickerService;
   late FakeScreenService screenService;
+  late FakeImageProcessingService processingService;
   late TracingViewModel viewModel;
 
   setUp(() {
     pickerService = FakeImagePickerService();
     screenService = FakeScreenService();
+    processingService = FakeImageProcessingService();
     viewModel = TracingViewModel(
       pickerService: pickerService,
       screenService: screenService,
+      processingService: processingService,
     );
     viewModel.setImage(createSampleImage(name: 'sketch.png'));
   });
@@ -142,5 +146,59 @@ void main() {
     final scaleAfter =
         viewModel.transformationController.value.getMaxScaleOnAxis();
     expect(scaleAfter, greaterThan(scaleBefore));
+  });
+
+  testWidgets('quick invert button toggles inversion state', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    expect(viewModel.isInverted, isFalse);
+
+    // Find the quick invert button by tooltip
+    final invertButton = find.byTooltip('Invert Lines');
+    expect(invertButton, findsOneWidget);
+
+    await tester.tap(invertButton);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isInverted, isTrue);
+  });
+
+  testWidgets('BrightnessSheet displays three modes when inverted', (tester) async {
+    viewModel.setInverted(true);
+    await tester.pumpWidget(buildSubject());
+
+    // Open Display & Brightness sheet
+    final brightnessButton = find.byTooltip('Display & Brightness');
+    expect(brightnessButton, findsOneWidget);
+
+    await tester.tap(brightnessButton);
+    await tester.pumpAndSettle();
+
+    // Verify Invert Tracing Mode header is visible
+    expect(find.text('Invert Tracing Mode'), findsOneWidget);
+
+    // Verify all 3 modes are visible in the segmented button
+    expect(find.text('Original'), findsOneWidget);
+    expect(find.text('Enhanced'), findsOneWidget);
+    expect(find.text('Outline'), findsOneWidget);
+
+    // Initially in Original mode
+    expect(viewModel.invertMode, equals(InvertTracingMode.original));
+
+    // Tap Enhanced
+    await tester.tap(find.text('Enhanced'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.invertMode, equals(InvertTracingMode.enhanced));
+    expect(find.text('Detail Strength'), findsOneWidget);
+    expect(find.text('Sharpens small lines and enhances subtle contrast'), findsOneWidget);
+
+    // Tap Outline
+    await tester.tap(find.text('Outline'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.invertMode, equals(InvertTracingMode.fineOutline));
+    expect(find.text('Detail Strength'), findsOneWidget);
+    expect(find.text('Edge Sensitivity'), findsOneWidget);
   });
 }

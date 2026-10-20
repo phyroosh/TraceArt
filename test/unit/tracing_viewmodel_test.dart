@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
 import '../mocks/fake_services.dart';
 
@@ -8,14 +9,17 @@ void main() {
 
   late FakeImagePickerService pickerService;
   late FakeScreenService screenService;
+  late FakeImageProcessingService processingService;
   late TracingViewModel viewModel;
 
   setUp(() {
     pickerService = FakeImagePickerService();
     screenService = FakeScreenService();
+    processingService = FakeImageProcessingService();
     viewModel = TracingViewModel(
       pickerService: pickerService,
       screenService: screenService,
+      processingService: processingService,
     );
   });
 
@@ -243,6 +247,161 @@ void main() {
 
       await viewModel.handleAppLifecycle(AppLifecycleState.resumed);
       expect(screenService.current, closeTo(0.9, 0.01));
+    });
+  });
+
+  group('Fine Detail Mode & Tracing Invariant Tests', () {
+    test('initial state has default modes and values', () {
+      expect(viewModel.invertMode, equals(InvertTracingMode.original));
+      expect(viewModel.detailStrength, closeTo(0.5, 0.001));
+      expect(viewModel.edgeSensitivity, closeTo(0.5, 0.001));
+      expect(viewModel.isProcessing, isFalse);
+      expect(viewModel.processedImage, isNull);
+      expect(viewModel.activeDisplayImage, isNull);
+    });
+
+    test('setting invertMode to enhanced triggers processing when inverted', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.toggleInverted();
+      expect(viewModel.isInverted, isTrue);
+
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      // Wait for async processing
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(processingService.processCallCount, greaterThan(0));
+      expect(processingService.lastMode, equals(InvertTracingMode.enhanced));
+      expect(viewModel.processedImage, isNotNull);
+      expect(viewModel.activeDisplayImage, equals(viewModel.processedImage));
+    });
+
+    test('setting invertMode to fineOutline passes edgeSensitivity to processing', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setInverted(true);
+      viewModel.setEdgeSensitivity(0.85);
+
+      viewModel.setInvertMode(InvertTracingMode.fineOutline);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(processingService.lastMode, equals(InvertTracingMode.fineOutline));
+      expect(processingService.lastSensitivity, closeTo(0.85, 0.001));
+    });
+
+    test('adjusting detailStrength debounces and triggers re-processing', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setInverted(true);
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final initialCount = processingService.processCallCount;
+
+      viewModel.setDetailStrength(0.9);
+      expect(viewModel.detailStrength, closeTo(0.9, 0.001));
+
+      // Before debounce fires
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(processingService.processCallCount, equals(initialCount));
+
+      // After debounce (150ms) fires
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(processingService.processCallCount, greaterThan(initialCount));
+      expect(processingService.lastStrength, closeTo(0.9, 0.001));
+    });
+
+    test('caching: switching back to previously processed mode is instantaneous', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setInverted(true);
+
+      // 1. Process enhanced
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final countAfterEnhanced = processingService.processCallCount;
+
+      // 2. Process outline
+      viewModel.setInvertMode(InvertTracingMode.fineOutline);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(processingService.processCallCount, greaterThan(countAfterEnhanced));
+      final countAfterOutline = processingService.processCallCount;
+
+      // 3. Switch back to enhanced: should use cached image WITHOUT re-calling process
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(processingService.processCallCount, equals(countAfterOutline));
+      expect(viewModel.processedImage, isNotNull);
+    });
+
+    test('core invariant: switching modes NEVER alters isLocked state', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.toggleLock();
+      expect(viewModel.isLocked, isTrue);
+
+      viewModel.setInverted(true);
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      expect(viewModel.isLocked, isTrue);
+
+      viewModel.setInvertMode(InvertTracingMode.fineOutline);
+      expect(viewModel.isLocked, isTrue);
+
+      viewModel.setDetailStrength(0.8);
+      expect(viewModel.isLocked, isTrue);
+
+      viewModel.setEdgeSensitivity(0.3);
+      expect(viewModel.isLocked, isTrue);
+
+      viewModel.setInvertMode(InvertTracingMode.original);
+      expect(viewModel.isLocked, isTrue);
+    });
+
+    test('core invariant: switching modes NEVER alters transformation matrix or quarterTurns', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.updateViewportSize(const Size(400, 800));
+      viewModel.zoomIn();
+      viewModel.rotateClockwise();
+
+      final matrixBefore = viewModel.transformationController.value.clone();
+      final turnsBefore = viewModel.quarterTurns;
+
+      viewModel.setInverted(true);
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(viewModel.transformationController.value, equals(matrixBefore));
+      expect(viewModel.quarterTurns, equals(turnsBefore));
+
+      viewModel.setInvertMode(InvertTracingMode.fineOutline);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(viewModel.transformationController.value, equals(matrixBefore));
+      expect(viewModel.quarterTurns, equals(turnsBefore));
+    });
+
+    test('disabling inversion restores activeDisplayImage to original image', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setInverted(true);
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(viewModel.activeDisplayImage, isNotNull);
+      expect(viewModel.activeDisplayImage, isNot(equals(viewModel.image)));
+
+      viewModel.toggleInverted();
+      expect(viewModel.isInverted, isFalse);
+      expect(viewModel.activeDisplayImage, equals(viewModel.image));
+    });
+
+    test('clearImage resets processedImage and cache', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setInverted(true);
+      viewModel.setInvertMode(InvertTracingMode.enhanced);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(viewModel.processedImage, isNotNull);
+
+      await viewModel.clearImage();
+
+      expect(viewModel.processedImage, isNull);
+      expect(viewModel.activeDisplayImage, isNull);
     });
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/image_processing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
 import '../widgets/alignment_toolbar.dart';
@@ -158,12 +159,18 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                             IconButton(
                               icon: Icon(
                                 vm.isInverted
-                                    ? Icons.invert_colors_off_rounded
+                                    ? (vm.invertMode ==
+                                            InvertTracingMode.fineOutline
+                                        ? Icons.polyline_rounded
+                                        : vm.invertMode ==
+                                                InvertTracingMode.enhanced
+                                            ? Icons.auto_fix_high_rounded
+                                            : Icons.invert_colors_off_rounded)
                                     : Icons.invert_colors_rounded,
                                 size: 20,
                               ),
                               tooltip: vm.isInverted
-                                  ? 'Normal Colors'
+                                  ? '${vm.invertMode.displayName} (Tap to turn off)'
                                   : 'Invert Lines',
                               color: vm.isInverted
                                   ? AppTheme.primary
@@ -293,11 +300,19 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                             IconButton(
                               icon: Icon(
                                 vm.isInverted
-                                    ? Icons.invert_colors_off_rounded
+                                    ? (vm.invertMode ==
+                                            InvertTracingMode.fineOutline
+                                        ? Icons.polyline_rounded
+                                        : vm.invertMode ==
+                                                InvertTracingMode.enhanced
+                                            ? Icons.auto_fix_high_rounded
+                                            : Icons.invert_colors_off_rounded)
                                     : Icons.invert_colors_rounded,
                                 size: 20,
                               ),
-                              tooltip: 'Invert Lines',
+                              tooltip: vm.isInverted
+                                  ? '${vm.invertMode.displayName} (Tap to turn off)'
+                                  : 'Invert Lines',
                               color: vm.isInverted
                                   ? AppTheme.primary
                                   : AppTheme.textSecondary,

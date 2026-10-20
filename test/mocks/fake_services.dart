@@ -1,20 +1,12 @@
 import 'dart:typed_data';
 import 'package:traceart/models/image_model.dart';
 import 'package:traceart/services/image_picker_service.dart';
+import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/services/screen_service.dart';
 
 // Valid 10x10 PNG bytes for testing
 final Uint8List testPngBytes = Uint8List.fromList(<int>[
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-  0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x0A,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x8D, 0x32, 0xCF,
-  0xBD, 0x00, 0x00, 0x00, 0x19, 0x49, 0x44, 0x41,
-  0x54, 0x78, 0x9C, 0x63, 0x60, 0x18, 0x05, 0xA3,
-  0x60, 0x14, 0x8C, 0x82, 0x51, 0x30, 0x28, 0x18,
-  0x28, 0x00, 0x00, 0x27, 0x10, 0x02, 0x71, 0x3C,
-  0x87, 0x3B, 0xC3, 0x00, 0x00, 0x00, 0x00, 0x49,
-  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 10, 0, 0, 0, 10, 8, 2, 0, 0, 0, 2, 80, 88, 234, 0, 0, 0, 60, 73, 68, 65, 84, 120, 156, 99, 249, 255, 255, 63, 3, 110, 192, 130, 71, 14, 33, 205, 200, 200, 136, 213, 24, 168, 244, 255, 255, 255, 177, 170, 64, 24, 142, 85, 5, 138, 221, 152, 42, 208, 157, 134, 166, 2, 139, 203, 145, 85, 96, 247, 24, 92, 5, 78, 127, 67, 116, 3, 0, 135, 15, 45, 17, 100, 159, 251, 103, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
 ]);
 
 ImageModel createSampleImage({
@@ -88,5 +80,28 @@ class FakeScreenService implements ScreenService {
   @override
   Future<void> setKeepAwake(bool enable) async {
     keepAwakeState = enable;
+  }
+}
+
+class FakeImageProcessingService implements ImageProcessingService {
+  int processCallCount = 0;
+  InvertTracingMode? lastMode;
+  double? lastStrength;
+  double? lastSensitivity;
+  Uint8List? customResultBytes;
+
+  @override
+  Future<Uint8List> processImage({
+    required Uint8List sourceBytes,
+    required InvertTracingMode mode,
+    required double detailStrength,
+    required double edgeSensitivity,
+  }) async {
+    processCallCount++;
+    lastMode = mode;
+    lastStrength = detailStrength;
+    lastSensitivity = edgeSensitivity;
+    if (mode == InvertTracingMode.original) return sourceBytes;
+    return customResultBytes ?? sourceBytes;
   }
 }

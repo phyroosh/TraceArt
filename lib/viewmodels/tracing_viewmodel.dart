@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/image_model.dart';
 import '../services/image_picker_service.dart';
+import '../services/image_processing_service.dart';
 import '../services/screen_service.dart';
 
 /// ViewModel managing TraceArt state:
@@ -13,8 +15,10 @@ import '../services/screen_service.dart';
 class TracingViewModel extends ChangeNotifier {
   final ImagePickerService _pickerService;
   final ScreenService _screenService;
+  final ImageProcessingService _processingService;
 
   ImageModel? _image;
+  ImageModel? _processedImage;
   bool _isLocked = false;
   int _quarterTurns = 0;
   final TransformationController _transformationController =
@@ -31,15 +35,40 @@ class TracingViewModel extends ChangeNotifier {
   bool _isInverted = false;
   bool _hasCalculatedInitialFit = false;
 
+  // Fine Detail Mode state
+  InvertTracingMode _invertMode = InvertTracingMode.original;
+  double _detailStrength = 0.5;
+  double _edgeSensitivity = 0.5;
+  bool _isProcessing = false;
+  final Map<String, ImageModel> _processedCache = {};
+  Timer? _debounceTimer;
+  int _processingRequestId = 0;
+
   TracingViewModel({
     ImagePickerService? pickerService,
     ScreenService? screenService,
+    ImageProcessingService? processingService,
   })  : _pickerService = pickerService ?? DefaultImagePickerService(),
-        _screenService = screenService ?? DefaultScreenService();
+        _screenService = screenService ?? DefaultScreenService(),
+        _processingService = processingService ?? DefaultImageProcessingService();
 
   // --- Getters ---
 
   ImageModel? get image => _image;
+  ImageModel? get processedImage => _processedImage;
+
+  /// The active image to render on the canvas.
+  /// When inversion is enabled with Enhanced or Fine Outline mode, returns the
+  /// processed variant (or falls back to original if processing is underway).
+  ImageModel? get activeDisplayImage {
+    if (_isInverted &&
+        _invertMode != InvertTracingMode.original &&
+        _processedImage != null) {
+      return _processedImage;
+    }
+    return _image;
+  }
+
   bool get hasImage => _image != null;
   bool get isLocked => _isLocked;
   int get quarterTurns => _quarterTurns;
@@ -53,6 +82,11 @@ class TracingViewModel extends ChangeNotifier {
   bool get keepAwake => _keepAwake;
   bool get isInverted => _isInverted;
   bool get isBrightnessSupported => _screenService.isBrightnessSupported;
+
+  InvertTracingMode get invertMode => _invertMode;
+  double get detailStrength => _detailStrength;
+  double get edgeSensitivity => _edgeSensitivity;
+  bool get isProcessing => _isProcessing;
 
   /// Effective size of the image accounting for 90-degree rotations
   Size get effectiveImageSize {
@@ -79,6 +113,9 @@ class TracingViewModel extends ChangeNotifier {
     try {
       final selected = await _pickerService.pickImageFromGallery();
       if (selected != null) {
+        _debounceTimer?.cancel();
+        _processedCache.clear();
+        _processedImage = null;
         _image = selected;
         _quarterTurns = 0;
         _isLocked = false;
@@ -93,6 +130,10 @@ class TracingViewModel extends ChangeNotifier {
         if (_viewportSize != null) {
           fitToScreen();
         }
+
+        if (_isInverted && _invertMode != InvertTracingMode.original) {
+          _scheduleImageProcessing(immediate: true);
+        }
       }
     } catch (e) {
       _errorMessage = 'Could not load selected image: ${e.toString()}';
@@ -104,6 +145,9 @@ class TracingViewModel extends ChangeNotifier {
 
   /// Sets an image directly (useful for tests or preloading)
   void setImage(ImageModel model) {
+    _debounceTimer?.cancel();
+    _processedCache.clear();
+    _processedImage = null;
     _image = model;
     _quarterTurns = 0;
     _isLocked = false;
@@ -112,10 +156,16 @@ class TracingViewModel extends ChangeNotifier {
     if (_viewportSize != null) {
       fitToScreen();
     }
+    if (_isInverted && _invertMode != InvertTracingMode.original) {
+      _scheduleImageProcessing(immediate: true);
+    }
     notifyListeners();
   }
 
   Future<void> clearImage() async {
+    _debounceTimer?.cancel();
+    _processedCache.clear();
+    _processedImage = null;
     _image = null;
     _isLocked = false;
     _quarterTurns = 0;
@@ -282,6 +332,113 @@ class TracingViewModel extends ChangeNotifier {
   void toggleInverted() {
     _isInverted = !_isInverted;
     notifyListeners();
+    if (_isInverted && _invertMode != InvertTracingMode.original) {
+      _scheduleImageProcessing(immediate: true);
+    }
+  }
+
+  void setInverted(bool value) {
+    if (_isInverted == value) return;
+    _isInverted = value;
+    notifyListeners();
+    if (_isInverted && _invertMode != InvertTracingMode.original) {
+      _scheduleImageProcessing(immediate: true);
+    }
+  }
+
+  void setInvertMode(InvertTracingMode mode) {
+    if (_invertMode == mode) return;
+    _invertMode = mode;
+    notifyListeners();
+    if (_isInverted && mode != InvertTracingMode.original) {
+      _scheduleImageProcessing(immediate: true);
+    }
+  }
+
+  void setDetailStrength(double value) {
+    final clamped = value.clamp(0.0, 1.0);
+    if ((_detailStrength - clamped).abs() < 0.001) return;
+    _detailStrength = clamped;
+    notifyListeners();
+    if (_isInverted && _invertMode != InvertTracingMode.original) {
+      _scheduleImageProcessing(immediate: false);
+    }
+  }
+
+  void setEdgeSensitivity(double value) {
+    final clamped = value.clamp(0.0, 1.0);
+    if ((_edgeSensitivity - clamped).abs() < 0.001) return;
+    _edgeSensitivity = clamped;
+    notifyListeners();
+    if (_isInverted && _invertMode == InvertTracingMode.fineOutline) {
+      _scheduleImageProcessing(immediate: false);
+    }
+  }
+
+  void _scheduleImageProcessing({bool immediate = false}) {
+    if (_image == null || !_isInverted || _invertMode == InvertTracingMode.original) {
+      _debounceTimer?.cancel();
+      _isProcessing = false;
+      return;
+    }
+
+    final cacheKey =
+        '${_image!.name}_${_invertMode.name}_${(_detailStrength * 20).round()}_${(_edgeSensitivity * 20).round()}';
+    if (_processedCache.containsKey(cacheKey)) {
+      _debounceTimer?.cancel();
+      _processedImage = _processedCache[cacheKey];
+      _isProcessing = false;
+      notifyListeners();
+      return;
+    }
+
+    _debounceTimer?.cancel();
+
+    if (immediate) {
+      _executeImageProcessing(cacheKey);
+    } else {
+      _isProcessing = true;
+      notifyListeners();
+      _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+        _executeImageProcessing(cacheKey);
+      });
+    }
+  }
+
+  Future<void> _executeImageProcessing(String cacheKey) async {
+    if (_image == null) return;
+    final requestId = ++_processingRequestId;
+    _isProcessing = true;
+    notifyListeners();
+
+    try {
+      final processedBytes = await _processingService.processImage(
+        sourceBytes: _image!.bytes,
+        mode: _invertMode,
+        detailStrength: _detailStrength,
+        edgeSensitivity: _edgeSensitivity,
+      );
+
+      if (requestId == _processingRequestId && _image != null) {
+        final resultModel = ImageModel(
+          bytes: processedBytes,
+          width: _image!.width,
+          height: _image!.height,
+          name: '${_image!.name}_${_invertMode.name}',
+          path: _image!.path,
+        );
+
+        _processedCache[cacheKey] = resultModel;
+        _processedImage = resultModel;
+        _isProcessing = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      if (requestId == _processingRequestId) {
+        _isProcessing = false;
+        notifyListeners();
+      }
+    }
   }
 
   // --- App Lifecycle ---
@@ -302,6 +459,7 @@ class TracingViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _transformationController.dispose();
     _screenService.restoreBrightness();
     _screenService.setKeepAwake(false);

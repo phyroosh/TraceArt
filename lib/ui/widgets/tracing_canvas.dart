@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/image_processing_service.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
 
 /// The core canvas component rendering the reference image.
@@ -27,15 +28,20 @@ class TracingCanvas extends StatelessWidget {
     }
 
     final effectiveSize = viewModel.effectiveImageSize;
+    final displayImage = viewModel.activeDisplayImage ?? image;
 
     Widget imageContent = Image.memory(
-      image.bytes,
+      displayImage.bytes,
       fit: BoxFit.contain,
       gaplessPlayback: true,
       filterQuality: FilterQuality.high,
     );
 
-    if (viewModel.isInverted) {
+    // Apply GPU inversion matrix for Original Invert mode,
+    // or as a smooth fallback while Enhanced/Outline is computing
+    final isOriginalInvert = viewModel.invertMode == InvertTracingMode.original;
+    final isFallback = viewModel.activeDisplayImage == null;
+    if (viewModel.isInverted && (isOriginalInvert || isFallback)) {
       imageContent = ColorFiltered(
         colorFilter: const ColorFilter.matrix(_invertMatrix),
         child: imageContent,

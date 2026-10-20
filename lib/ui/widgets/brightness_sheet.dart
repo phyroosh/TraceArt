@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/image_processing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
 
@@ -27,24 +28,30 @@ class BrightnessSheet extends StatelessWidget {
       builder: (context, _) {
         final brightnessPct = (viewModel.brightness * 100).round();
 
-        return Container(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceElevated,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: AppTheme.borderLight),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.6),
-                blurRadius: 30,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        return Material(
+          color: AppTheme.surfaceElevated,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border.all(color: AppTheme.borderLight),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  blurRadius: 30,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               // Drag Handle
               Center(
                 child: Container(
@@ -222,6 +229,239 @@ class BrightnessSheet extends StatelessWidget {
                 onChanged: (_) => viewModel.toggleInverted(),
               ),
 
+              // Fine Detail Mode Controls (only visible when Invert is enabled)
+              if (viewModel.isInverted) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceHighlight.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.borderLight),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.auto_fix_high_rounded,
+                                color: AppTheme.primary,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Invert Tracing Mode',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (viewModel.isProcessing)
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Mode Segmented Buttons
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<InvertTracingMode>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            backgroundColor: AppTheme.surfaceElevated,
+                            selectedBackgroundColor: AppTheme.primary,
+                            selectedForegroundColor: Colors.black,
+                            foregroundColor: AppTheme.textPrimary,
+                            side: const BorderSide(color: AppTheme.borderLight),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          segments: const [
+                            ButtonSegment(
+                              value: InvertTracingMode.original,
+                              label: Text('Original',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            ButtonSegment(
+                              value: InvertTracingMode.enhanced,
+                              label: Text('Enhanced',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            ButtonSegment(
+                              value: InvertTracingMode.fineOutline,
+                              label: Text('Outline',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                          selected: {viewModel.invertMode},
+                          onSelectionChanged: (set) =>
+                              viewModel.setInvertMode(set.first),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Mode Description
+                      Text(
+                        viewModel.invertMode.description,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+
+                      // Enhanced Invert Controls
+                      if (viewModel.invertMode == InvertTracingMode.enhanced) ...[
+                        const SizedBox(height: 12),
+                        const Divider(color: AppTheme.borderLight, height: 1),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Detail Strength',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${(viewModel.detailStrength * 100).round()}%',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: AppTheme.primaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Sharpens small lines and enhances subtle contrast',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        Slider(
+                          value: viewModel.detailStrength,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 20,
+                          label: '${(viewModel.detailStrength * 100).round()}%',
+                          onChanged: viewModel.setDetailStrength,
+                        ),
+                      ],
+
+                      // Fine Outline Controls
+                      if (viewModel.invertMode ==
+                          InvertTracingMode.fineOutline) ...[
+                        const SizedBox(height: 12),
+                        const Divider(color: AppTheme.borderLight, height: 1),
+                        const SizedBox(height: 10),
+
+                        // Detail Strength (Line Crispness / Outline Brightness)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Detail Strength',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${(viewModel.detailStrength * 100).round()}%',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: AppTheme.primaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Controls line crispness and outline brightness',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        Slider(
+                          value: viewModel.detailStrength,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 20,
+                          label: '${(viewModel.detailStrength * 100).round()}%',
+                          onChanged: viewModel.setDetailStrength,
+                        ),
+
+                        // Edge Sensitivity
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Edge Sensitivity',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${(viewModel.edgeSensitivity * 100).round()}%',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: AppTheme.primaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Higher values reveal delicate hair strands and faint details',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        Slider(
+                          value: viewModel.edgeSensitivity,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 20,
+                          label: '${(viewModel.edgeSensitivity * 100).round()}%',
+                          onChanged: viewModel.setEdgeSensitivity,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 12),
 
               // Info Banner
@@ -255,7 +495,10 @@ class BrightnessSheet extends StatelessWidget {
               ),
             ],
           ),
-        );
+        ),
+      ),
+    ),
+  );
       },
     );
   }

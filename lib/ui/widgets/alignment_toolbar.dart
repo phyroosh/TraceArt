@@ -9,6 +9,7 @@ class AlignmentToolbar extends StatelessWidget {
   final VoidCallback onOpenBrightness;
   final VoidCallback onOpenGrid;
   final VoidCallback onOpenStencil;
+  final VoidCallback onOpenRuler;
 
   const AlignmentToolbar({
     super.key,
@@ -16,6 +17,7 @@ class AlignmentToolbar extends StatelessWidget {
     required this.onOpenBrightness,
     required this.onOpenGrid,
     required this.onOpenStencil,
+    required this.onOpenRuler,
   });
 
   @override
@@ -133,6 +135,19 @@ class AlignmentToolbar extends StatelessWidget {
                 ? AppTheme.primary
                 : AppTheme.textPrimary,
             onPressed: onOpenStencil,
+          ),
+
+          // Calibrated Ruler & 1:1 Scale
+          _buildIconButton(
+            key: const Key('ruler_toolbar_button'),
+            icon: viewModel.isRulerEnabled
+                ? Icons.straighten_rounded
+                : Icons.square_foot_rounded,
+            tooltip: 'Calibrated Rulers & True Scale',
+            color: viewModel.isRulerEnabled
+                ? AppTheme.primary
+                : AppTheme.textPrimary,
+            onPressed: onOpenRuler,
           ),
           const SizedBox(width: 6),
 

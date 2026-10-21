@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traceart/models/grid_config.dart';
+import 'package:traceart/models/ruler_config.dart';
 import 'package:traceart/models/stencil_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
@@ -811,6 +812,107 @@ void main() {
       expect(viewModel.stencilConfig.posterizeLevels, equals(4));
       expect(viewModel.stencilConfig.edgeStrength, equals(0.5));
       expect(viewModel.processedStencilImage, isNull);
+    });
+  });
+
+  group('Calibrated Physical Size & Ruler', () {
+    test('initial ruler configuration is disabled with cm unit and artwork origin', () {
+      expect(viewModel.isRulerEnabled, isFalse);
+      expect(viewModel.rulerConfig.unit, equals(RulerUnit.cm));
+      expect(viewModel.rulerConfig.origin, equals(RulerOrigin.artwork));
+      expect(viewModel.rulerConfig.calibrationFactor, equals(1.0));
+    });
+
+    test('toggleRuler toggles isRulerEnabled state', () {
+      viewModel.toggleRuler();
+      expect(viewModel.isRulerEnabled, isTrue);
+
+      viewModel.toggleRuler();
+      expect(viewModel.isRulerEnabled, isFalse);
+    });
+
+    test('setRulerUnit updates unit', () {
+      viewModel.setRulerUnit(RulerUnit.inch);
+      expect(viewModel.rulerConfig.unit, equals(RulerUnit.inch));
+
+      viewModel.setRulerUnit(RulerUnit.cm);
+      expect(viewModel.rulerConfig.unit, equals(RulerUnit.cm));
+    });
+
+    test('setRulerOrigin updates origin', () {
+      viewModel.setRulerOrigin(RulerOrigin.screen);
+      expect(viewModel.rulerConfig.origin, equals(RulerOrigin.screen));
+
+      viewModel.setRulerOrigin(RulerOrigin.artwork);
+      expect(viewModel.rulerConfig.origin, equals(RulerOrigin.artwork));
+    });
+
+    test('setCalibrationFactor updates and clamps calibration', () {
+      viewModel.setCalibrationFactor(1.25);
+      expect(viewModel.rulerConfig.calibrationFactor, closeTo(1.25, 0.001));
+
+      // Clamping test
+      viewModel.setCalibrationFactor(0.1);
+      expect(viewModel.rulerConfig.calibrationFactor, equals(0.60));
+
+      viewModel.setCalibrationFactor(2.5);
+      expect(viewModel.rulerConfig.calibrationFactor, equals(1.60));
+    });
+
+    test('calculates physical artwork dimensions and aspect ratio accurately', () {
+      final img = createSampleImage(width: 800, height: 600);
+      viewModel.setImage(img);
+      viewModel.updateViewportSize(const Size(1000, 1000));
+
+      // After initial fit in 1000x1000 viewport with 32px padding (968x968 available):
+      // 800x600 scales by 1.21 to 968x726:
+      expect(viewModel.renderedArtworkSize.width, equals(968.0));
+      expect(viewModel.renderedArtworkSize.height, equals(726.0));
+      expect(viewModel.artworkAspectRatio, closeTo(800.0 / 600.0, 0.001));
+
+      expect(viewModel.physicalArtworkWidthCm, closeTo(968.0 / 62.9921, 0.01));
+      expect(viewModel.physicalArtworkHeightCm, closeTo(726.0 / 62.9921, 0.01));
+      expect(viewModel.physicalArtworkWidthIn, closeTo(968.0 / 160.0, 0.01));
+      expect(viewModel.physicalArtworkHeightIn, closeTo(726.0 / 160.0, 0.01));
+    });
+
+    test('scaleToPhysicalSize adjusts transformation matrix to target cm', () {
+      final img = createSampleImage(width: 1000, height: 500);
+      viewModel.setImage(img);
+      viewModel.updateViewportSize(const Size(800, 800));
+
+      // Request physical width of 10.0 cm
+      viewModel.scaleToPhysicalSize(widthCm: 10.0);
+
+      // Target px width should be 10.0 * 62.9921 = 629.921 px
+      // Target scale = 629.921 / 1000 = ~0.6299
+      expect(viewModel.physicalArtworkWidthCm, closeTo(10.0, 0.1));
+      expect(viewModel.currentScaleFactor, closeTo(0.63, 0.02));
+    });
+
+    test('scaleToStandardPaperSize scales image to fit standard preset', () {
+      final img = createSampleImage(width: 1200, height: 1600);
+      viewModel.setImage(img);
+      viewModel.updateViewportSize(const Size(1000, 1000));
+
+      // Scale to A5 (14.8 x 21.0 cm)
+      viewModel.scaleToStandardPaperSize(StandardPaperSize.a5);
+
+      // The image fits within 14.8 x 21.0 cm
+      expect(viewModel.physicalArtworkWidthCm, lessThanOrEqualTo(14.85));
+      expect(viewModel.physicalArtworkHeightCm, lessThanOrEqualTo(21.05));
+    });
+
+    test('clearImage resets ruler origin to default', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setRulerOrigin(RulerOrigin.screen);
+      viewModel.toggleRuler();
+      expect(viewModel.rulerConfig.origin, equals(RulerOrigin.screen));
+      expect(viewModel.isRulerEnabled, isTrue);
+
+      await viewModel.clearImage();
+
+      expect(viewModel.rulerConfig.origin, equals(RulerOrigin.artwork));
     });
   });
 }

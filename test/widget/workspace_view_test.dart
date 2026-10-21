@@ -5,10 +5,13 @@ import 'package:traceart/models/stencil_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/theme/app_theme.dart';
 import 'package:traceart/ui/views/workspace_view.dart';
+import 'package:traceart/models/ruler_config.dart';
 import 'package:traceart/ui/widgets/alignment_toolbar.dart';
 import 'package:traceart/ui/widgets/camera_feed_view.dart';
 import 'package:traceart/ui/widgets/grid_painter.dart';
 import 'package:traceart/ui/widgets/locked_toolbar.dart';
+import 'package:traceart/ui/widgets/ruler_sheet.dart';
+import 'package:traceart/ui/widgets/screen_calibration_dialog.dart';
 import 'package:traceart/ui/widgets/stencil_sheet.dart';
 import 'package:traceart/ui/widgets/tracing_canvas.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
@@ -531,6 +534,98 @@ void main() {
     // Verify StencilSheet opens even while canvas is locked
     expect(find.byType(StencilSheet), findsOneWidget);
     expect(find.text('Quick Stencil Filters'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tapping ruler button in AlignmentToolbar opens RulerSheet and configures overlay',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // 1. Verify ruler button exists in toolbar
+    final rulerBtn = find.byKey(const Key('ruler_toolbar_button'));
+    expect(rulerBtn, findsOneWidget);
+
+    // 2. Tap to open RulerSheet
+    await tester.tap(rulerBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RulerSheet), findsOneWidget);
+    expect(find.text('Calibrated Rulers & Scale'), findsOneWidget);
+    expect(find.text('Current Physical Size on Screen'), findsOneWidget);
+
+    // 3. Toggle master ruler switch to ON
+    final masterSwitch = find.byKey(const Key('ruler_master_switch'));
+    expect(masterSwitch, findsOneWidget);
+    await tester.tap(masterSwitch);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isRulerEnabled, isTrue);
+
+    // 4. Switch measurement unit to Inches
+    await tester.tap(find.text('Inches (")'));
+    await tester.pumpAndSettle();
+    expect(viewModel.rulerConfig.unit, equals(RulerUnit.inch));
+
+    // 5. Open ScreenCalibrationDialog
+    final calibrateBtn = find.byKey(const Key('open_calibration_button'));
+    expect(calibrateBtn, findsOneWidget);
+    await tester.tap(calibrateBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ScreenCalibrationDialog), findsOneWidget);
+    expect(find.text('Screen Size Calibration'), findsOneWidget);
+
+    // Nudge calibration up
+    await tester.ensureVisible(find.byKey(const Key('calibration_nudge_up')));
+    await tester.tap(find.byKey(const Key('calibration_nudge_up')));
+    await tester.pumpAndSettle();
+    expect(viewModel.rulerConfig.calibrationFactor, closeTo(1.005, 0.001));
+
+    // Tap Done to close calibration
+    await tester.ensureVisible(find.byKey(const Key('calibration_done_button')));
+    await tester.tap(find.byKey(const Key('calibration_done_button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ScreenCalibrationDialog), findsNothing);
+
+    // Close RulerSheet
+    Navigator.of(tester.element(find.byType(WorkspaceView))).pop();
+    await tester.pumpAndSettle();
+
+    // 6. Verify RulerOverlay and Dimension Pill are visible on screen
+    expect(find.byKey(const Key('ruler_dimension_pill')), findsOneWidget);
+    expect(find.byKey(const Key('ruler_corner_unit_toggle')), findsOneWidget);
+
+    // 7. Tap corner badge to switch back to cm
+    await tester.tap(find.byKey(const Key('ruler_corner_unit_toggle')));
+    await tester.pumpAndSettle();
+    expect(viewModel.rulerConfig.unit, equals(RulerUnit.cm));
+  });
+
+  testWidgets(
+      'in locked mode 3-dot options provides locked ruler button that opens RulerSheet',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // Lock canvas
+    await tester.tap(find.byKey(const Key('lock_canvas_button')));
+    await tester.pumpAndSettle();
+    expect(viewModel.isLocked, isTrue);
+
+    // Open locked options menu via 3-dot
+    await tester.tap(find.byKey(const Key('locked_menu_button')));
+    await tester.pumpAndSettle();
+
+    // Verify locked ruler button is present
+    final lockedRulerBtn = find.byKey(const Key('locked_ruler_button'));
+    expect(lockedRulerBtn, findsOneWidget);
+
+    // Tap locked ruler button
+    await tester.tap(lockedRulerBtn);
+    await tester.pumpAndSettle();
+
+    // Verify RulerSheet opens even while canvas is locked
+    expect(find.byType(RulerSheet), findsOneWidget);
+    expect(find.text('Calibrated Rulers & Scale'), findsOneWidget);
   });
 }
 

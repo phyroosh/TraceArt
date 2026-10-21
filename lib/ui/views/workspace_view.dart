@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/ruler_config.dart';
 import '../../services/image_processing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
@@ -7,6 +8,8 @@ import '../widgets/brightness_sheet.dart';
 import '../widgets/camera_feed_view.dart';
 import '../widgets/grid_sheet.dart';
 import '../widgets/locked_toolbar.dart';
+import '../widgets/ruler_painter.dart';
+import '../widgets/ruler_sheet.dart';
 import '../widgets/stencil_sheet.dart';
 import '../widgets/tracing_canvas.dart';
 
@@ -76,6 +79,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
     StencilSheet.show(context, widget.viewModel);
   }
 
+  void _openRuler(BuildContext context) {
+    RulerSheet.show(context, widget.viewModel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = widget.viewModel;
@@ -113,7 +120,77 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                   child: TracingCanvas(viewModel: vm),
                 ),
 
-                // 2. Unlocked Mode: Top Navigation & Status Bar
+                // 2. Calibrated Physical Measuring Ruler Overlay
+                RulerOverlay(viewModel: vm),
+
+                // 3. Live Physical Dimension Readout Pill
+                if (vm.isRulerEnabled && vm.hasImage)
+                  ListenableBuilder(
+                    listenable: vm.transformationController,
+                    builder: (context, _) => SafeArea(
+                      child: Align(
+                        alignment: Alignment.bottomRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 84, right: 16),
+                          child: IgnorePointer(
+                            child: Container(
+                              key: const Key('ruler_dimension_pill'),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xEB101217),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(alpha: 0.5),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.straighten_rounded,
+                                    size: 14,
+                                    color: AppTheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    vm.rulerConfig.unit == RulerUnit.cm
+                                        ? '${vm.physicalArtworkWidthCm.toStringAsFixed(1)} × ${vm.physicalArtworkHeightCm.toStringAsFixed(1)} cm'
+                                        : '${vm.physicalArtworkWidthIn.toStringAsFixed(2)}" × ${vm.physicalArtworkHeightIn.toStringAsFixed(2)}"',
+                                    style: const TextStyle(
+                                      color: AppTheme.textPrimary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '(${vm.currentScaleFactor.toStringAsFixed(2)}×)',
+                                    style: const TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 4. Unlocked Mode: Top Navigation & Status Bar
                 if (!vm.isLocked)
                   SafeArea(
                     child: Align(
@@ -260,6 +337,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                           onOpenBrightness: () => _openBrightness(context),
                           onOpenGrid: () => _openGrid(context),
                           onOpenStencil: () => _openStencil(context),
+                          onOpenRuler: () => _openRuler(context),
                         ),
                       ),
                     ),
@@ -395,6 +473,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                           onOpenBrightness: () => _openBrightness(context),
                           onOpenGrid: () => _openGrid(context),
                           onOpenStencil: () => _openStencil(context),
+                          onOpenRuler: () => _openRuler(context),
                         ),
                       ),
                     ),

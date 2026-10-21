@@ -10,6 +10,7 @@ class LockedToolbar extends StatelessWidget {
   final VoidCallback onOpenBrightness;
   final VoidCallback onOpenGrid;
   final VoidCallback onOpenStencil;
+  final VoidCallback onOpenRuler;
 
   const LockedToolbar({
     super.key,
@@ -17,6 +18,7 @@ class LockedToolbar extends StatelessWidget {
     required this.onOpenBrightness,
     required this.onOpenGrid,
     required this.onOpenStencil,
+    required this.onOpenRuler,
   });
 
   @override
@@ -126,6 +128,25 @@ class LockedToolbar extends StatelessWidget {
                 size: 22,
               ),
               onPressed: onOpenStencil,
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Quick Ruler Button
+          Tooltip(
+            message: 'Calibrated Rulers & True Scale',
+            child: IconButton(
+              key: const Key('locked_ruler_button'),
+              icon: Icon(
+                viewModel.isRulerEnabled
+                    ? Icons.straighten_rounded
+                    : Icons.square_foot_rounded,
+                color: viewModel.isRulerEnabled
+                    ? AppTheme.primary
+                    : AppTheme.textSecondary,
+                size: 22,
+              ),
+              onPressed: onOpenRuler,
             ),
           ),
           const SizedBox(width: 4),

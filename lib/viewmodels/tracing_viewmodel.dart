@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/grid_config.dart';
 import '../models/image_model.dart';
+import '../models/ruler_config.dart';
 import '../models/stencil_config.dart';
 import '../services/camera_service.dart';
 import '../services/image_picker_service.dart';
@@ -79,6 +80,9 @@ class TracingViewModel extends ChangeNotifier {
   Timer? _stencilDebounceTimer;
   int _stencilRequestId = 0;
 
+  // Calibrated Physical Size & Ruler state
+  RulerConfig _rulerConfig = const RulerConfig();
+
   TracingViewModel({
     ImagePickerService? pickerService,
     ScreenService? screenService,
@@ -96,6 +100,48 @@ class TracingViewModel extends ChangeNotifier {
   ImageModel? get processedStencilImage => _processedStencilImage;
   StencilConfig get stencilConfig => _stencilConfig;
   bool get isStencilActive => _stencilConfig.isEnabled;
+  RulerConfig get rulerConfig => _rulerConfig;
+  bool get isRulerEnabled => _rulerConfig.isEnabled;
+
+  double get currentScaleFactor {
+    final matrix = _transformationController.value;
+    return matrix.getMaxScaleOnAxis();
+  }
+
+  Size get renderedArtworkSize {
+    final scale = currentScaleFactor;
+    return Size(
+      effectiveImageSize.width * scale,
+      effectiveImageSize.height * scale,
+    );
+  }
+
+  double get physicalArtworkWidthCm =>
+      _rulerConfig.pxToCm(renderedArtworkSize.width);
+  double get physicalArtworkHeightCm =>
+      _rulerConfig.pxToCm(renderedArtworkSize.height);
+  double get physicalArtworkWidthIn =>
+      _rulerConfig.pxToInch(renderedArtworkSize.width);
+  double get physicalArtworkHeightIn =>
+      _rulerConfig.pxToInch(renderedArtworkSize.height);
+
+  double get artworkAspectRatio {
+    if (effectiveImageSize.height == 0) return 1.0;
+    return effectiveImageSize.width / effectiveImageSize.height;
+  }
+
+  Rect get artworkViewportBounds {
+    final matrix = _transformationController.value;
+    final dx = matrix.storage[12];
+    final dy = matrix.storage[13];
+    final scale = currentScaleFactor;
+    return Rect.fromLTWH(
+      dx,
+      dy,
+      effectiveImageSize.width * scale,
+      effectiveImageSize.height * scale,
+    );
+  }
 
   /// The active image to render on the canvas.
   /// When a stencil filter is applied, returns the stencil-processed variant.
@@ -239,6 +285,7 @@ class TracingViewModel extends ChangeNotifier {
     _processedImage = null;
     _processedStencilImage = null;
     _stencilConfig = const StencilConfig();
+    _rulerConfig = const RulerConfig();
     _image = null;
     _isLocked = false;
     _quarterTurns = 0;
@@ -586,6 +633,115 @@ class TracingViewModel extends ChangeNotifier {
     if (_image == null) return;
     final otsu = _processingService.computeOtsuThreshold(_image!.bytes);
     setStencilThreshold(otsu);
+  }
+
+  // --- Calibrated Physical Ruler & 1:1 Scale Controls ---
+
+  void setRulerConfig(RulerConfig config) {
+    if (_rulerConfig == config) return;
+    _rulerConfig = config;
+    notifyListeners();
+  }
+
+  void toggleRuler() {
+    _rulerConfig = _rulerConfig.copyWith(isEnabled: !_rulerConfig.isEnabled);
+    notifyListeners();
+  }
+
+  void setRulerUnit(RulerUnit unit) {
+    if (_rulerConfig.unit == unit) return;
+    _rulerConfig = _rulerConfig.copyWith(unit: unit);
+    notifyListeners();
+  }
+
+  void setRulerOrigin(RulerOrigin origin) {
+    if (_rulerConfig.origin == origin) return;
+    _rulerConfig = _rulerConfig.copyWith(origin: origin);
+    notifyListeners();
+  }
+
+  void setCalibrationFactor(double factor) {
+    final clamped = factor.clamp(0.60, 1.60);
+    if ((_rulerConfig.calibrationFactor - clamped).abs() < 0.0001) return;
+    _rulerConfig = _rulerConfig.copyWith(calibrationFactor: clamped);
+    notifyListeners();
+  }
+
+  void scaleToPhysicalSize({
+    double? widthCm,
+    double? heightCm,
+    double? widthIn,
+    double? heightIn,
+  }) {
+    if (_image == null) return;
+    final contentSize = effectiveImageSize;
+    if (contentSize.isEmpty) return;
+
+    double? targetLogicalPx;
+    bool isWidth = true;
+
+    if (widthCm != null) {
+      targetLogicalPx = _rulerConfig.cmToPx(widthCm);
+      isWidth = true;
+    } else if (heightCm != null) {
+      targetLogicalPx = _rulerConfig.cmToPx(heightCm);
+      isWidth = false;
+    } else if (widthIn != null) {
+      targetLogicalPx = _rulerConfig.inchToPx(widthIn);
+      isWidth = true;
+    } else if (heightIn != null) {
+      targetLogicalPx = _rulerConfig.inchToPx(heightIn);
+      isWidth = false;
+    }
+
+    if (targetLogicalPx == null || targetLogicalPx <= 0) return;
+
+    final targetScale = isWidth
+        ? (targetLogicalPx / contentSize.width)
+        : (targetLogicalPx / contentSize.height);
+
+    final clampedScale = targetScale.clamp(0.05, 35.0);
+
+    final renderedWidth = contentSize.width * clampedScale;
+    final renderedHeight = contentSize.height * clampedScale;
+
+    final vp = _viewportSize ?? Size(renderedWidth, renderedHeight);
+    final dx = (vp.width - renderedWidth) / 2.0;
+    final dy = (vp.height - renderedHeight) / 2.0;
+
+    _transformationController.value = Matrix4.translationValues(dx, dy, 0.0) *
+        Matrix4.diagonal3Values(clampedScale, clampedScale, clampedScale);
+    notifyListeners();
+  }
+
+  void scaleToStandardPaperSize(StandardPaperSize size) {
+    if (_image == null) return;
+    final contentSize = effectiveImageSize;
+    if (contentSize.isEmpty) return;
+
+    final isContentPortrait = contentSize.height >= contentSize.width;
+    final paperWidthCm = isContentPortrait
+        ? math.min(size.widthCm, size.heightCm)
+        : math.max(size.widthCm, size.heightCm);
+    final paperHeightCm = isContentPortrait
+        ? math.max(size.widthCm, size.heightCm)
+        : math.min(size.widthCm, size.heightCm);
+
+    final scaleX = _rulerConfig.cmToPx(paperWidthCm) / contentSize.width;
+    final scaleY = _rulerConfig.cmToPx(paperHeightCm) / contentSize.height;
+    final targetScale = math.min(scaleX, scaleY);
+
+    final clampedScale = targetScale.clamp(0.05, 35.0);
+    final renderedWidth = contentSize.width * clampedScale;
+    final renderedHeight = contentSize.height * clampedScale;
+
+    final vp = _viewportSize ?? Size(renderedWidth, renderedHeight);
+    final dx = (vp.width - renderedWidth) / 2.0;
+    final dy = (vp.height - renderedHeight) / 2.0;
+
+    _transformationController.value = Matrix4.translationValues(dx, dy, 0.0) *
+        Matrix4.diagonal3Values(clampedScale, clampedScale, clampedScale);
+    notifyListeners();
   }
 
   // --- AR Camera Tracing Controls ---

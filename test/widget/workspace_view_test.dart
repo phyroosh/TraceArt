@@ -5,26 +5,31 @@ import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/theme/app_theme.dart';
 import 'package:traceart/ui/views/workspace_view.dart';
 import 'package:traceart/ui/widgets/alignment_toolbar.dart';
+import 'package:traceart/ui/widgets/camera_feed_view.dart';
 import 'package:traceart/ui/widgets/grid_painter.dart';
 import 'package:traceart/ui/widgets/locked_toolbar.dart';
 import 'package:traceart/ui/widgets/tracing_canvas.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
+import '../mocks/fake_camera_service.dart';
 import '../mocks/fake_services.dart';
 
 void main() {
   late FakeImagePickerService pickerService;
   late FakeScreenService screenService;
   late FakeImageProcessingService processingService;
+  late FakeCameraService cameraService;
   late TracingViewModel viewModel;
 
   setUp(() {
     pickerService = FakeImagePickerService();
     screenService = FakeScreenService();
     processingService = FakeImageProcessingService();
+    cameraService = FakeCameraService();
     viewModel = TracingViewModel(
       pickerService: pickerService,
       screenService: screenService,
       processingService: processingService,
+      cameraService: cameraService,
     );
     viewModel.setImage(createSampleImage(name: 'sketch.png'));
   });
@@ -347,6 +352,98 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Drawing Grid Overlay'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tapping mode switch button toggles AR Camera Tracing mode and reveals AR toolbar controls',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // Initially in Light Box mode, no camera feed
+    expect(find.text('Light Box'), findsOneWidget);
+    expect(find.byType(CameraFeedView), findsNothing);
+    expect(find.byKey(const Key('torch_toolbar_button')), findsNothing);
+    expect(find.byKey(const Key('camera_switch_button')), findsNothing);
+
+    // Tap mode switch button
+    final modeButton = find.byKey(const Key('mode_switch_button'));
+    await tester.tap(modeButton);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isArMode, isTrue);
+    expect(find.text('AR Mode'), findsOneWidget);
+    expect(find.byType(CameraFeedView), findsOneWidget);
+    expect(find.byKey(const Key('torch_toolbar_button')), findsOneWidget);
+    expect(find.byKey(const Key('camera_switch_button')), findsOneWidget);
+
+    // Tap Torch button in AlignmentToolbar
+    await tester.tap(find.byKey(const Key('torch_toolbar_button')));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isTorchOn, isTrue);
+    expect(cameraService.toggleTorchCalls, equals(1));
+
+    // Tap Camera Switch button
+    await tester.tap(find.byKey(const Key('camera_switch_button')));
+    await tester.pumpAndSettle();
+
+    expect(cameraService.switchCameraCalls, equals(1));
+  });
+
+  testWidgets(
+      'opening BrightnessSheet in AR mode displays AR overlay opacity slider and desk flashlight',
+      (tester) async {
+    await viewModel.setTracingMode(TracingMode.arCamera);
+    await tester.pumpWidget(buildSubject());
+
+    // Open Brightness & Tracing Illumination sheet
+    final brightnessBtn = find.byKey(const Key('brightness_toolbar_button'));
+    expect(brightnessBtn, findsOneWidget);
+    await tester.tap(brightnessBtn);
+    await tester.pumpAndSettle();
+
+    // Verify AR Overlay controls are present
+    expect(find.text('AR Tracing Overlay'), findsOneWidget);
+    expect(find.text('Artwork Opacity'), findsOneWidget);
+    expect(find.byKey(const Key('ar_overlay_opacity_slider')), findsOneWidget);
+    expect(find.byKey(const Key('ar_torch_tile')), findsOneWidget);
+
+    // Toggle desk flashlight tile
+    await tester.tap(find.byKey(const Key('ar_torch_tile')));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isTorchOn, isTrue);
+    expect(cameraService.toggleTorchCalls, equals(1));
+  });
+
+  testWidgets(
+      'locking canvas in AR mode retains camera feed and provides desk torch button in locked menu',
+      (tester) async {
+    await viewModel.setTracingMode(TracingMode.arCamera);
+    await tester.pumpWidget(buildSubject());
+
+    // Lock canvas
+    await tester.tap(find.byKey(const Key('lock_canvas_button')));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isLocked, isTrue);
+    // Camera feed remains active behind locked artwork
+    expect(find.byType(CameraFeedView), findsOneWidget);
+
+    // Open locked options menu via 3-dot
+    await tester.tap(find.byKey(const Key('locked_menu_button')));
+    await tester.pumpAndSettle();
+
+    // Verify locked torch button is available
+    final lockedTorchBtn = find.byKey(const Key('locked_torch_button'));
+    expect(lockedTorchBtn, findsOneWidget);
+
+    // Tap locked torch button
+    await tester.tap(lockedTorchBtn);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isTorchOn, isTrue);
+    expect(cameraService.toggleTorchCalls, equals(1));
   });
 }
 

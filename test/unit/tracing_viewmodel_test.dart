@@ -1,8 +1,10 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traceart/models/grid_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
+import '../mocks/fake_camera_service.dart';
 import '../mocks/fake_services.dart';
 
 void main() {
@@ -11,16 +13,19 @@ void main() {
   late FakeImagePickerService pickerService;
   late FakeScreenService screenService;
   late FakeImageProcessingService processingService;
+  late FakeCameraService cameraService;
   late TracingViewModel viewModel;
 
   setUp(() {
     pickerService = FakeImagePickerService();
     screenService = FakeScreenService();
     processingService = FakeImageProcessingService();
+    cameraService = FakeCameraService();
     viewModel = TracingViewModel(
       pickerService: pickerService,
       screenService: screenService,
       processingService: processingService,
+      cameraService: cameraService,
     );
   });
 
@@ -583,6 +588,104 @@ void main() {
         expect(color.label.isNotEmpty, isTrue);
         expect(color.color.a, equals(1.0));
       }
+    });
+  });
+
+  group('AR Camera Tracing Mode', () {
+    test('default state is lightBox with 50% opacity and torch off', () {
+      expect(viewModel.tracingMode, equals(TracingMode.lightBox));
+      expect(viewModel.isArMode, isFalse);
+      expect(viewModel.overlayOpacity, equals(0.5));
+      expect(viewModel.isTorchOn, isFalse);
+      expect(viewModel.isCameraInitializing, isFalse);
+      expect(viewModel.cameraErrorMessage, isNull);
+    });
+
+    test('setTracingMode to arCamera initializes camera and sets isArMode', () async {
+      await viewModel.setTracingMode(TracingMode.arCamera);
+
+      expect(viewModel.tracingMode, equals(TracingMode.arCamera));
+      expect(viewModel.isArMode, isTrue);
+      expect(cameraService.initializeCalls, equals(1));
+      expect(cameraService.isInitialized, isTrue);
+      expect(viewModel.cameraErrorMessage, isNull);
+    });
+
+    test('switching back to lightBox disposes camera', () async {
+      await viewModel.setTracingMode(TracingMode.arCamera);
+      expect(viewModel.isArMode, isTrue);
+
+      await viewModel.setTracingMode(TracingMode.lightBox);
+      expect(viewModel.isArMode, isFalse);
+      expect(cameraService.disposeCalls, equals(1));
+    });
+
+    test('toggleTracingMode alternates between lightBox and arCamera', () async {
+      expect(viewModel.isArMode, isFalse);
+
+      await viewModel.toggleTracingMode();
+      expect(viewModel.isArMode, isTrue);
+      expect(cameraService.initializeCalls, equals(1));
+
+      await viewModel.toggleTracingMode();
+      expect(viewModel.isArMode, isFalse);
+      expect(cameraService.disposeCalls, equals(1));
+    });
+
+    test('camera initialization failure sets cameraErrorMessage', () async {
+      cameraService.shouldSucceed = false;
+
+      await viewModel.setTracingMode(TracingMode.arCamera);
+
+      expect(viewModel.isArMode, isTrue);
+      expect(viewModel.cameraErrorMessage, contains('Camera permission or device not available'));
+    });
+
+    test('setOverlayOpacity clamps between 0.1 and 0.95', () {
+      viewModel.setOverlayOpacity(0.75);
+      expect(viewModel.overlayOpacity, closeTo(0.75, 0.005));
+
+      // Test lower clamp
+      viewModel.setOverlayOpacity(0.02);
+      expect(viewModel.overlayOpacity, closeTo(0.1, 0.005));
+
+      // Test upper clamp
+      viewModel.setOverlayOpacity(1.5);
+      expect(viewModel.overlayOpacity, closeTo(0.95, 0.005));
+    });
+
+    test('toggleTorch toggles camera torch state', () async {
+      await viewModel.setTracingMode(TracingMode.arCamera);
+      expect(viewModel.isTorchOn, isFalse);
+
+      await viewModel.toggleTorch();
+      expect(cameraService.toggleTorchCalls, equals(1));
+      expect(viewModel.isTorchOn, isTrue);
+
+      await viewModel.toggleTorch();
+      expect(cameraService.toggleTorchCalls, equals(2));
+      expect(viewModel.isTorchOn, isFalse);
+    });
+
+    test('switchCamera switches camera lens direction', () async {
+      await viewModel.setTracingMode(TracingMode.arCamera);
+      expect(cameraService.currentLensDirection, equals(CameraLensDirection.back));
+
+      await viewModel.switchCamera();
+      expect(cameraService.switchCameraCalls, equals(1));
+      expect(cameraService.currentLensDirection, equals(CameraLensDirection.front));
+    });
+
+    test('clearImage resets tracing mode to lightBox and disposes camera', () async {
+      viewModel.setImage(createSampleImage());
+      await viewModel.setTracingMode(TracingMode.arCamera);
+      expect(viewModel.isArMode, isTrue);
+
+      await viewModel.clearImage();
+
+      expect(viewModel.tracingMode, equals(TracingMode.lightBox));
+      expect(viewModel.isArMode, isFalse);
+      expect(cameraService.disposeCalls, greaterThan(0));
     });
   });
 }

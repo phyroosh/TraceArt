@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
 import '../widgets/alignment_toolbar.dart';
 import '../widgets/brightness_sheet.dart';
+import '../widgets/camera_feed_view.dart';
 import '../widgets/grid_sheet.dart';
 import '../widgets/locked_toolbar.dart';
 import '../widgets/tracing_canvas.dart';
@@ -96,6 +97,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
             body: Stack(
               fit: StackFit.expand,
               children: [
+                // 0. AR Camera Live Stream (when in AR mode)
+                if (vm.isArMode)
+                  CameraFeedView(viewModel: vm),
+
                 // 1. Core Tracing Canvas (Image layer)
                 // When locked, AbsorbPointer makes the canvas completely touch non-responsive
                 AbsorbPointer(
@@ -166,6 +171,38 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                               ),
                             ),
                             const SizedBox(width: 8),
+
+                            // Mode Switcher: Light Box vs AR Mode
+                            FilledButton.tonalIcon(
+                              key: const Key('mode_switch_button'),
+                              onPressed: vm.toggleTracingMode,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: vm.isArMode
+                                    ? AppTheme.primary.withValues(alpha: 0.25)
+                                    : AppTheme.surfaceHighlight,
+                                foregroundColor: vm.isArMode
+                                    ? AppTheme.primaryLight
+                                    : AppTheme.textPrimary,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              icon: Icon(
+                                vm.isArMode
+                                    ? Icons.camera_alt_rounded
+                                    : Icons.lightbulb_rounded,
+                                size: 14,
+                              ),
+                              label: Text(
+                                vm.isArMode ? 'AR Mode' : 'Light Box',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
 
                             // Quick Invert Button
                             IconButton(

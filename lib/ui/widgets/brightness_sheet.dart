@@ -159,6 +159,121 @@ class BrightnessSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
+              // AR Camera Tracing Controls (when in AR Mode)
+              if (viewModel.isArMode) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Material(
+                    color: AppTheme.surfaceHighlight.withValues(alpha: 0.6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: AppTheme.borderLight),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.camera_alt_rounded,
+                                color: AppTheme.primary,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'AR Tracing Overlay',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.opacity_rounded,
+                                color: AppTheme.textTertiary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Artwork Opacity',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${(viewModel.overlayOpacity * 100).round()}%',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.primary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            key: const Key('ar_overlay_opacity_slider'),
+                            value: viewModel.overlayOpacity,
+                            min: 0.1,
+                            max: 0.95,
+                            divisions: 85,
+                            label: '${(viewModel.overlayOpacity * 100).round()}%',
+                            onChanged: (val) => viewModel.setOverlayOpacity(val),
+                          ),
+                          SwitchListTile(
+                            key: const Key('ar_torch_tile'),
+                            contentPadding: EdgeInsets.zero,
+                            secondary: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceElevated,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                viewModel.isTorchOn
+                                    ? Icons.flash_on_rounded
+                                    : Icons.flash_off_rounded,
+                                color: viewModel.isTorchOn
+                                    ? AppTheme.primary
+                                    : AppTheme.textTertiary,
+                                size: 20,
+                              ),
+                            ),
+                            title: const Text(
+                              'Desk Flashlight',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            subtitle: const Text(
+                              'Illuminate paper or canvas surface',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            value: viewModel.isTorchOn,
+                            activeThumbColor: AppTheme.primary,
+                            onChanged: (_) => viewModel.toggleTorch(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+
               // Keep Screen Awake Tile
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

@@ -107,7 +107,29 @@ class LockedToolbar extends StatelessWidget {
               onPressed: onOpenGrid,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
+
+          // Quick Torch Button (AR Mode)
+          if (viewModel.isArMode) ...[
+            Tooltip(
+              message: viewModel.isTorchOn ? 'Torch On' : 'Torch Off',
+              child: IconButton(
+                key: const Key('locked_torch_button'),
+                icon: Icon(
+                  viewModel.isTorchOn
+                      ? Icons.flashlight_on_rounded
+                      : Icons.flashlight_off_rounded,
+                  color: viewModel.isTorchOn
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
+                  size: 22,
+                ),
+                onPressed: viewModel.toggleTorch,
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          const SizedBox(width: 2),
 
           // Primary Action: UNLOCK BUTTON
           FilledButton.icon(

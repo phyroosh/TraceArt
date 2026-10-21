@@ -72,23 +72,32 @@ class TracingCanvas extends StatelessWidget {
       }
     }
 
+    Widget stackContent = Stack(
+      fit: StackFit.expand,
+      children: [
+        imageContent,
+        if (viewModel.isGridEnabled)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: GridPainter(config: viewModel.gridConfig),
+            ),
+          ),
+      ],
+    );
+
+    if (viewModel.isArMode) {
+      stackContent = Opacity(
+        opacity: viewModel.overlayOpacity,
+        child: stackContent,
+      );
+    }
+
     final childWidget = SizedBox(
       width: effectiveSize.width,
       height: effectiveSize.height,
       child: RotatedBox(
         quarterTurns: viewModel.quarterTurns,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            imageContent,
-            if (viewModel.isGridEnabled)
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: GridPainter(config: viewModel.gridConfig),
-                ),
-              ),
-          ],
-        ),
+        child: stackContent,
       ),
     );
 

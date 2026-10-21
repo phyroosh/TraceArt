@@ -3,9 +3,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/grid_config.dart';
 import '../models/image_model.dart';
+import '../services/camera_service.dart';
 import '../services/image_picker_service.dart';
 import '../services/image_processing_service.dart';
 import '../services/screen_service.dart';
+
+/// Available tracing modes in TraceArt.
+enum TracingMode {
+  lightBox('Light Box', 'Screen tracing for translucent paper'),
+  arCamera('AR Camera', 'Surface tracing for opaque canvas & boards');
+
+  final String label;
+  final String description;
+  const TracingMode(this.label, this.description);
+}
 
 /// ViewModel managing TraceArt state:
 /// - Selected image persistence
@@ -14,10 +25,12 @@ import '../services/screen_service.dart';
 /// - Brightness & Screen Keep-Awake controls
 /// - Inverted contrast mode for line tracing
 /// - Proportional drawing grid overlay
+/// - AR Camera tracing mode for opaque surfaces
 class TracingViewModel extends ChangeNotifier {
   final ImagePickerService _pickerService;
   final ScreenService _screenService;
   final ImageProcessingService _processingService;
+  final CameraService _cameraService;
 
   ImageModel? _image;
   ImageModel? _processedImage;
@@ -37,6 +50,12 @@ class TracingViewModel extends ChangeNotifier {
   bool _isInverted = false;
   bool _hasCalculatedInitialFit = false;
 
+  // AR Camera Tracing Mode state
+  TracingMode _tracingMode = TracingMode.lightBox;
+  double _overlayOpacity = 0.5;
+  bool _isCameraInitializing = false;
+  String? _cameraErrorMessage;
+
   // Drawing Grid Overlay state
   bool _isGridEnabled = false;
   GridConfig _gridConfig = const GridConfig();
@@ -55,9 +74,11 @@ class TracingViewModel extends ChangeNotifier {
     ImagePickerService? pickerService,
     ScreenService? screenService,
     ImageProcessingService? processingService,
+    CameraService? cameraService,
   })  : _pickerService = pickerService ?? DefaultImagePickerService(),
         _screenService = screenService ?? DefaultScreenService(),
-        _processingService = processingService ?? DefaultImageProcessingService();
+        _processingService = processingService ?? DefaultImageProcessingService(),
+        _cameraService = cameraService ?? DefaultCameraService();
 
   // --- Getters ---
 
@@ -98,6 +119,15 @@ class TracingViewModel extends ChangeNotifier {
 
   bool get isGridEnabled => _isGridEnabled;
   GridConfig get gridConfig => _gridConfig;
+
+  // AR Camera Mode Getters
+  TracingMode get tracingMode => _tracingMode;
+  bool get isArMode => _tracingMode == TracingMode.arCamera;
+  double get overlayOpacity => _overlayOpacity;
+  bool get isCameraInitializing => _isCameraInitializing;
+  String? get cameraErrorMessage => _cameraErrorMessage;
+  CameraService get cameraService => _cameraService;
+  bool get isTorchOn => _cameraService.isTorchOn;
 
   /// Effective size of the image accounting for 90-degree rotations
   Size get effectiveImageSize {
@@ -183,6 +213,10 @@ class TracingViewModel extends ChangeNotifier {
     _hasCalculatedInitialFit = false;
     _lineColorTint = LineColorTint.white;
     _transformationController.value = Matrix4.identity();
+    await _cameraService.dispose();
+    _tracingMode = TracingMode.lightBox;
+    _cameraErrorMessage = null;
+    _isCameraInitializing = false;
     await _screenService.setSystemUiLocked(false);
     await _screenService.restoreBrightness();
     await _screenService.setKeepAwake(false);
@@ -467,6 +501,57 @@ class TracingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- AR Camera Tracing Controls ---
+
+  Future<void> setTracingMode(TracingMode mode) async {
+    if (_tracingMode == mode) return;
+    _tracingMode = mode;
+    _cameraErrorMessage = null;
+    notifyListeners();
+
+    if (mode == TracingMode.arCamera) {
+      _isCameraInitializing = true;
+      notifyListeners();
+
+      final success = await _cameraService.initializeCamera();
+      _isCameraInitializing = false;
+      if (!success) {
+        _cameraErrorMessage = 'Camera permission or device not available';
+      }
+      notifyListeners();
+    } else {
+      await _cameraService.dispose();
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleTracingMode() async {
+    final next = _tracingMode == TracingMode.lightBox
+        ? TracingMode.arCamera
+        : TracingMode.lightBox;
+    await setTracingMode(next);
+  }
+
+  void setOverlayOpacity(double opacity) {
+    final clamped = opacity.clamp(0.1, 0.95);
+    if ((_overlayOpacity - clamped).abs() < 0.005) return;
+    _overlayOpacity = clamped;
+    notifyListeners();
+  }
+
+  Future<void> toggleTorch() async {
+    await _cameraService.toggleTorch();
+    notifyListeners();
+  }
+
+  Future<void> switchCamera() async {
+    _isCameraInitializing = true;
+    notifyListeners();
+    await _cameraService.switchCamera();
+    _isCameraInitializing = false;
+    notifyListeners();
+  }
+
   void _scheduleImageProcessing({bool immediate = false}) {
     if (_image == null || !_isInverted || _invertMode == InvertTracingMode.original) {
       _debounceTimer?.cancel();
@@ -540,6 +625,9 @@ class TracingViewModel extends ChangeNotifier {
         state == AppLifecycleState.detached) {
       // Restore system brightness when user backgrounds the app
       await _screenService.restoreBrightness();
+      if (_tracingMode == TracingMode.arCamera) {
+        await _cameraService.dispose();
+      }
     } else if (state == AppLifecycleState.resumed && _image != null) {
       // Re-apply tracing brightness when returning to active tracing session
       await _screenService.setBrightness(_brightness);
@@ -549,6 +637,10 @@ class TracingViewModel extends ChangeNotifier {
       if (_isLocked) {
         await _screenService.setSystemUiLocked(true);
       }
+      if (_tracingMode == TracingMode.arCamera) {
+        await _cameraService.initializeCamera(direction: _cameraService.currentLensDirection);
+        notifyListeners();
+      }
     }
   }
 
@@ -556,6 +648,7 @@ class TracingViewModel extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     _transformationController.dispose();
+    _cameraService.dispose();
     _screenService.setSystemUiLocked(false);
     _screenService.restoreBrightness();
     _screenService.setKeepAwake(false);

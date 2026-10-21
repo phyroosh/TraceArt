@@ -78,10 +78,34 @@ class AlignmentToolbar extends StatelessWidget {
 
           // Brightness quick toggle
           _buildIconButton(
+            key: const Key('brightness_toolbar_button'),
             icon: Icons.wb_sunny_outlined,
             tooltip: 'Display & Brightness',
             onPressed: onOpenBrightness,
           ),
+
+          // AR Mode Camera & Torch Controls
+          if (viewModel.isArMode) ...[
+            _buildIconButton(
+              key: const Key('torch_toolbar_button'),
+              icon: viewModel.isTorchOn
+                  ? Icons.flashlight_on_rounded
+                  : Icons.flashlight_off_rounded,
+              tooltip: viewModel.isTorchOn
+                  ? 'Torch On (Desk Light)'
+                  : 'Torch Off (Desk Light)',
+              color: viewModel.isTorchOn
+                  ? AppTheme.primary
+                  : AppTheme.textPrimary,
+              onPressed: viewModel.toggleTorch,
+            ),
+            _buildIconButton(
+              key: const Key('camera_switch_button'),
+              icon: Icons.flip_camera_ios_rounded,
+              tooltip: 'Switch Camera',
+              onPressed: viewModel.switchCamera,
+            ),
+          ],
 
           // Drawing Grid toggle / configure
           _buildIconButton(

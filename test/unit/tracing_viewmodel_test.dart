@@ -291,11 +291,24 @@ void main() {
   group('Fine Detail Mode & Tracing Invariant Tests', () {
     test('initial state has default modes and values', () {
       expect(viewModel.invertMode, equals(InvertTracingMode.original));
+      expect(viewModel.lineColorTint, equals(LineColorTint.white));
       expect(viewModel.detailStrength, closeTo(0.5, 0.001));
       expect(viewModel.edgeSensitivity, closeTo(0.5, 0.001));
       expect(viewModel.isProcessing, isFalse);
       expect(viewModel.processedImage, isNull);
       expect(viewModel.activeDisplayImage, isNull);
+    });
+
+    test('setLineColorTint updates tint and clearImage resets it', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setLineColorTint(LineColorTint.neonGreen);
+      expect(viewModel.lineColorTint, equals(LineColorTint.neonGreen));
+
+      viewModel.setLineColorTint(LineColorTint.cyan);
+      expect(viewModel.lineColorTint, equals(LineColorTint.cyan));
+
+      await viewModel.clearImage();
+      expect(viewModel.lineColorTint, equals(LineColorTint.white));
     });
 
     test('setting invertMode to enhanced triggers processing when inverted', () async {

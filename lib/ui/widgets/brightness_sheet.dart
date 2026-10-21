@@ -457,6 +457,136 @@ class BrightnessSheet extends StatelessWidget {
                           onChanged: viewModel.setEdgeSensitivity,
                         ),
                       ],
+
+                      const SizedBox(height: 12),
+                      const Divider(color: AppTheme.borderLight, height: 1),
+                      const SizedBox(height: 10),
+
+                      // Line Color Tint Section Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.palette_outlined,
+                                color: AppTheme.primary,
+                                size: 16,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Line Color Tint',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            viewModel.lineColorTint.label,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: viewModel.lineColorTint == LineColorTint.white
+                                  ? AppTheme.primaryLight
+                                  : viewModel.lineColorTint.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        viewModel.lineColorTint.description,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Horizontal Row of Color Chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: LineColorTint.values.map((tint) {
+                            final isSelected = viewModel.lineColorTint == tint;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: InkWell(
+                                key: Key('tint_${tint.name}'),
+                                onTap: () => viewModel.setLineColorTint(tint),
+                                borderRadius: BorderRadius.circular(16),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? tint.color.withValues(alpha: 0.15)
+                                        : AppTheme.surfaceElevated,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? tint.color
+                                          : AppTheme.borderMedium,
+                                      width: isSelected ? 1.8 : 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 14,
+                                        height: 14,
+                                        decoration: BoxDecoration(
+                                          color: tint.color,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: tint.color.withValues(
+                                                  alpha: isSelected ? 0.6 : 0.2),
+                                              blurRadius: isSelected ? 6 : 2,
+                                              spreadRadius: 1,
+                                            ),
+                                          ],
+                                          border: Border.all(
+                                            color: Colors.black.withValues(alpha: 0.3),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: isSelected
+                                            ? Icon(
+                                                Icons.check,
+                                                size: 10,
+                                                color: tint.color.computeLuminance() > 0.5
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        tint.label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          color: isSelected
+                                              ? AppTheme.textPrimary
+                                              : AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
                     ],
                   ),
                 ),

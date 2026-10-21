@@ -20,6 +20,14 @@ class TracingCanvas extends StatelessWidget {
     0.0, 0.0, 0.0, 1.0, 0.0,
   ];
 
+  // Inverted grayscale luminance matrix (used when a color tint is selected in Original mode)
+  static const List<double> _invertGrayscaleMatrix = <double>[
+    -0.299, -0.587, -0.114, 0.0, 255.0,
+    -0.299, -0.587, -0.114, 0.0, 255.0,
+    -0.299, -0.587, -0.114, 0.0, 255.0,
+    0.0, 0.0, 0.0, 1.0, 0.0,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final image = viewModel.image;
@@ -41,11 +49,26 @@ class TracingCanvas extends StatelessWidget {
     // or as a smooth fallback while Enhanced/Outline is computing
     final isOriginalInvert = viewModel.invertMode == InvertTracingMode.original;
     final isFallback = viewModel.activeDisplayImage == null;
-    if (viewModel.isInverted && (isOriginalInvert || isFallback)) {
-      imageContent = ColorFiltered(
-        colorFilter: const ColorFilter.matrix(_invertMatrix),
-        child: imageContent,
-      );
+    final hasTint = viewModel.lineColorTint != LineColorTint.white;
+
+    if (viewModel.isInverted) {
+      if (isOriginalInvert || isFallback) {
+        final matrix = hasTint ? _invertGrayscaleMatrix : _invertMatrix;
+        imageContent = ColorFiltered(
+          colorFilter: ColorFilter.matrix(matrix),
+          child: imageContent,
+        );
+      }
+
+      if (hasTint) {
+        imageContent = ColorFiltered(
+          colorFilter: ColorFilter.mode(
+            viewModel.lineColorTint.color,
+            BlendMode.modulate,
+          ),
+          child: imageContent,
+        );
+      }
     }
 
     final childWidget = SizedBox(

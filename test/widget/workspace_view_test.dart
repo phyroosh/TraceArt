@@ -200,6 +200,30 @@ void main() {
     expect(viewModel.invertMode, equals(InvertTracingMode.fineOutline));
     expect(find.text('Detail Strength'), findsOneWidget);
     expect(find.text('Edge Sensitivity'), findsOneWidget);
+
+    // Verify Line Color Tint section is visible
+    expect(find.text('Line Color Tint'), findsOneWidget);
+    expect(find.byKey(const Key('tint_white')), findsOneWidget);
+    expect(find.byKey(const Key('tint_neonGreen')), findsOneWidget);
+    expect(find.byKey(const Key('tint_cyan')), findsOneWidget);
+    expect(find.byKey(const Key('tint_amberGold')), findsOneWidget);
+    expect(find.byKey(const Key('tint_nightRed')), findsOneWidget);
+    expect(find.byKey(const Key('tint_magenta')), findsOneWidget);
+
+    // Initially in White tint
+    expect(viewModel.lineColorTint, equals(LineColorTint.white));
+
+    // Scroll into view & tap Neon Green
+    await tester.ensureVisible(find.byKey(const Key('tint_neonGreen')));
+    await tester.tap(find.byKey(const Key('tint_neonGreen')));
+    await tester.pumpAndSettle();
+    expect(viewModel.lineColorTint, equals(LineColorTint.neonGreen));
+
+    // Tap Cyan
+    await tester.ensureVisible(find.byKey(const Key('tint_cyan')));
+    await tester.tap(find.byKey(const Key('tint_cyan')));
+    await tester.pumpAndSettle();
+    expect(viewModel.lineColorTint, equals(LineColorTint.cyan));
   });
 
   testWidgets('back navigation shows exit dialog when unlocked but is swallowed when locked',

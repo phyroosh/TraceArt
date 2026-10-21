@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 /// Selectable modes for inverted tracing:
@@ -35,6 +36,56 @@ enum InvertTracingMode {
         return 'Crisp outlines on dark background';
     }
   }
+}
+
+/// High-visibility color tints for inverted tracing lines:
+/// - [white]: Default clean neutral white illumination.
+/// - [neonGreen]: Peak human photopic eye sensitivity, maximum penetration through thick paper.
+/// - [cyan]: Vibrant cyan blue, high contrast against warm and dark surfaces.
+/// - [amberGold]: Warm amber, high contrast through yellow/ivory sketch paper.
+/// - [nightRed]: Night-vision red, reduces eye strain in darkroom environments.
+/// - [magenta]: Vibrant magenta, crisp contrast against graphite and dark media.
+enum LineColorTint {
+  white(
+    label: 'White',
+    color: Color(0xFFFFFFFF),
+    description: 'Clean neutral white lines',
+  ),
+  neonGreen(
+    label: 'Neon Green',
+    color: Color(0xFF00FF66),
+    description: 'High eye sensitivity through thick paper',
+  ),
+  cyan(
+    label: 'Cyan',
+    color: Color(0xFF00E5FF),
+    description: 'Vibrant contrast on warm or dark paper',
+  ),
+  amberGold(
+    label: 'Amber Gold',
+    color: Color(0xFFFFB300),
+    description: 'Warm contrast for textured/yellow paper',
+  ),
+  nightRed(
+    label: 'Night Red',
+    color: Color(0xFFFF1744),
+    description: 'Prevents eye strain in dark environments',
+  ),
+  magenta(
+    label: 'Magenta',
+    color: Color(0xFFFF007F),
+    description: 'Punchy high-contrast outline tracing',
+  );
+
+  final String label;
+  final Color color;
+  final String description;
+
+  const LineColorTint({
+    required this.label,
+    required this.color,
+    required this.description,
+  });
 }
 
 /// Abstract contract for the image processing service.

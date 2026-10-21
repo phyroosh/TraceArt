@@ -37,6 +37,7 @@ class TracingViewModel extends ChangeNotifier {
 
   // Fine Detail Mode state
   InvertTracingMode _invertMode = InvertTracingMode.original;
+  LineColorTint _lineColorTint = LineColorTint.white;
   double _detailStrength = 0.5;
   double _edgeSensitivity = 0.5;
   bool _isProcessing = false;
@@ -84,6 +85,7 @@ class TracingViewModel extends ChangeNotifier {
   bool get isBrightnessSupported => _screenService.isBrightnessSupported;
 
   InvertTracingMode get invertMode => _invertMode;
+  LineColorTint get lineColorTint => _lineColorTint;
   double get detailStrength => _detailStrength;
   double get edgeSensitivity => _edgeSensitivity;
   bool get isProcessing => _isProcessing;
@@ -170,6 +172,7 @@ class TracingViewModel extends ChangeNotifier {
     _isLocked = false;
     _quarterTurns = 0;
     _hasCalculatedInitialFit = false;
+    _lineColorTint = LineColorTint.white;
     _transformationController.value = Matrix4.identity();
     await _screenService.setSystemUiLocked(false);
     await _screenService.restoreBrightness();
@@ -380,6 +383,12 @@ class TracingViewModel extends ChangeNotifier {
     if (_isInverted && _invertMode == InvertTracingMode.fineOutline) {
       _scheduleImageProcessing(immediate: false);
     }
+  }
+
+  void setLineColorTint(LineColorTint tint) {
+    if (_lineColorTint == tint) return;
+    _lineColorTint = tint;
+    notifyListeners();
   }
 
   void _scheduleImageProcessing({bool immediate = false}) {

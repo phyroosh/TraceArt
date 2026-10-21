@@ -177,10 +177,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                 size: 20,
                               ),
                               tooltip: vm.isInverted
-                                  ? '${vm.invertMode.displayName} (Tap to turn off)'
+                                  ? '${vm.invertMode.displayName} • ${vm.lineColorTint.label} (Tap to turn off)'
                                   : 'Invert Lines',
                               color: vm.isInverted
-                                  ? AppTheme.primary
+                                  ? (vm.lineColorTint == LineColorTint.white
+                                      ? AppTheme.primary
+                                      : vm.lineColorTint.color)
                                   : AppTheme.textSecondary,
                               onPressed: vm.toggleInverted,
                             ),
@@ -318,10 +320,12 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                                 size: 20,
                               ),
                               tooltip: vm.isInverted
-                                  ? '${vm.invertMode.displayName} (Tap to turn off)'
+                                  ? '${vm.invertMode.displayName} • ${vm.lineColorTint.label} (Tap to turn off)'
                                   : 'Invert Lines',
                               color: vm.isInverted
-                                  ? AppTheme.primary
+                                  ? (vm.lineColorTint == LineColorTint.white
+                                      ? AppTheme.primary
+                                      : vm.lineColorTint.color)
                                   : AppTheme.textSecondary,
                               onPressed: vm.toggleInverted,
                             ),

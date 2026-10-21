@@ -8,12 +8,14 @@ class AlignmentToolbar extends StatelessWidget {
   final TracingViewModel viewModel;
   final VoidCallback onOpenBrightness;
   final VoidCallback onOpenGrid;
+  final VoidCallback onOpenStencil;
 
   const AlignmentToolbar({
     super.key,
     required this.viewModel,
     required this.onOpenBrightness,
     required this.onOpenGrid,
+    required this.onOpenStencil,
   });
 
   @override
@@ -118,6 +120,19 @@ class AlignmentToolbar extends StatelessWidget {
                 ? AppTheme.primary
                 : AppTheme.textPrimary,
             onPressed: onOpenGrid,
+          ),
+
+          // Quick Stencil & Threshold Filters
+          _buildIconButton(
+            key: const Key('stencil_toolbar_button'),
+            icon: viewModel.isStencilActive
+                ? Icons.auto_fix_high_rounded
+                : Icons.auto_fix_normal_rounded,
+            tooltip: 'Quick Stencil & Threshold Filters',
+            color: viewModel.isStencilActive
+                ? AppTheme.primary
+                : AppTheme.textPrimary,
+            onPressed: onOpenStencil,
           ),
           const SizedBox(width: 6),
 

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/grid_config.dart';
 import '../models/image_model.dart';
+import '../models/stencil_config.dart';
 import '../services/camera_service.dart';
 import '../services/image_picker_service.dart';
 import '../services/image_processing_service.dart';
@@ -26,6 +27,7 @@ enum TracingMode {
 /// - Inverted contrast mode for line tracing
 /// - Proportional drawing grid overlay
 /// - AR Camera tracing mode for opaque surfaces
+/// - Quick stencil & threshold filters (B&W Stencil, Posterize, Edge Sketch)
 class TracingViewModel extends ChangeNotifier {
   final ImagePickerService _pickerService;
   final ScreenService _screenService;
@@ -70,6 +72,13 @@ class TracingViewModel extends ChangeNotifier {
   Timer? _debounceTimer;
   int _processingRequestId = 0;
 
+  // Quick Stencil & Threshold Filters state
+  StencilConfig _stencilConfig = const StencilConfig();
+  ImageModel? _processedStencilImage;
+  final Map<String, ImageModel> _stencilCache = {};
+  Timer? _stencilDebounceTimer;
+  int _stencilRequestId = 0;
+
   TracingViewModel({
     ImagePickerService? pickerService,
     ScreenService? screenService,
@@ -84,11 +93,18 @@ class TracingViewModel extends ChangeNotifier {
 
   ImageModel? get image => _image;
   ImageModel? get processedImage => _processedImage;
+  ImageModel? get processedStencilImage => _processedStencilImage;
+  StencilConfig get stencilConfig => _stencilConfig;
+  bool get isStencilActive => _stencilConfig.isEnabled;
 
   /// The active image to render on the canvas.
+  /// When a stencil filter is applied, returns the stencil-processed variant.
   /// When inversion is enabled with Enhanced or Fine Outline mode, returns the
-  /// processed variant (or falls back to original if processing is underway).
+  /// invert-processed variant. Otherwise falls back to original.
   ImageModel? get activeDisplayImage {
+    if (_stencilConfig.isEnabled && _processedStencilImage != null) {
+      return _processedStencilImage;
+    }
     if (_isInverted &&
         _invertMode != InvertTracingMode.original &&
         _processedImage != null) {
@@ -155,8 +171,11 @@ class TracingViewModel extends ChangeNotifier {
       final selected = await _pickerService.pickImageFromGallery();
       if (selected != null) {
         _debounceTimer?.cancel();
+        _stencilDebounceTimer?.cancel();
         _processedCache.clear();
+        _stencilCache.clear();
         _processedImage = null;
+        _processedStencilImage = null;
         _image = selected;
         _quarterTurns = 0;
         _isLocked = false;
@@ -172,6 +191,9 @@ class TracingViewModel extends ChangeNotifier {
           fitToScreen();
         }
 
+        if (_stencilConfig.isEnabled) {
+          _scheduleStencilProcessing(immediate: true);
+        }
         if (_isInverted && _invertMode != InvertTracingMode.original) {
           _scheduleImageProcessing(immediate: true);
         }
@@ -187,8 +209,11 @@ class TracingViewModel extends ChangeNotifier {
   /// Sets an image directly (useful for tests or preloading)
   void setImage(ImageModel model) {
     _debounceTimer?.cancel();
+    _stencilDebounceTimer?.cancel();
     _processedCache.clear();
+    _stencilCache.clear();
     _processedImage = null;
+    _processedStencilImage = null;
     _image = model;
     _quarterTurns = 0;
     _isLocked = false;
@@ -196,6 +221,9 @@ class TracingViewModel extends ChangeNotifier {
     _errorMessage = null;
     if (_viewportSize != null) {
       fitToScreen();
+    }
+    if (_stencilConfig.isEnabled) {
+      _scheduleStencilProcessing(immediate: true);
     }
     if (_isInverted && _invertMode != InvertTracingMode.original) {
       _scheduleImageProcessing(immediate: true);
@@ -205,8 +233,12 @@ class TracingViewModel extends ChangeNotifier {
 
   Future<void> clearImage() async {
     _debounceTimer?.cancel();
+    _stencilDebounceTimer?.cancel();
     _processedCache.clear();
+    _stencilCache.clear();
     _processedImage = null;
+    _processedStencilImage = null;
+    _stencilConfig = const StencilConfig();
     _image = null;
     _isLocked = false;
     _quarterTurns = 0;
@@ -501,6 +533,61 @@ class TracingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Quick Stencil & Threshold Filters Controls ---
+
+  void setStencilConfig(StencilConfig config) {
+    if (_stencilConfig == config) return;
+    _stencilConfig = config;
+    notifyListeners();
+    if (config.isEnabled) {
+      _scheduleStencilProcessing(immediate: true);
+    } else {
+      _processedStencilImage = null;
+      notifyListeners();
+    }
+  }
+
+  void setStencilType(StencilFilterType type) {
+    if (_stencilConfig.type == type) return;
+    setStencilConfig(_stencilConfig.copyWith(type: type));
+  }
+
+  void setStencilThreshold(double threshold) {
+    final clamped = threshold.clamp(0.05, 0.95);
+    if ((_stencilConfig.thresholdValue - clamped).abs() < 0.005) return;
+    _stencilConfig = _stencilConfig.copyWith(thresholdValue: clamped);
+    notifyListeners();
+    if (_stencilConfig.type == StencilFilterType.threshold) {
+      _scheduleStencilProcessing(immediate: false);
+    }
+  }
+
+  void setStencilPosterizeLevels(int levels) {
+    final clamped = levels.clamp(2, 8);
+    if (_stencilConfig.posterizeLevels == clamped) return;
+    _stencilConfig = _stencilConfig.copyWith(posterizeLevels: clamped);
+    notifyListeners();
+    if (_stencilConfig.type == StencilFilterType.posterize) {
+      _scheduleStencilProcessing(immediate: true);
+    }
+  }
+
+  void setStencilEdgeStrength(double strength) {
+    final clamped = strength.clamp(0.1, 1.0);
+    if ((_stencilConfig.edgeStrength - clamped).abs() < 0.005) return;
+    _stencilConfig = _stencilConfig.copyWith(edgeStrength: clamped);
+    notifyListeners();
+    if (_stencilConfig.type == StencilFilterType.edgeSketch) {
+      _scheduleStencilProcessing(immediate: false);
+    }
+  }
+
+  void applyAutoOtsuThreshold() {
+    if (_image == null) return;
+    final otsu = _processingService.computeOtsuThreshold(_image!.bytes);
+    setStencilThreshold(otsu);
+  }
+
   // --- AR Camera Tracing Controls ---
 
   Future<void> setTracingMode(TracingMode mode) async {
@@ -618,6 +705,66 @@ class TracingViewModel extends ChangeNotifier {
     }
   }
 
+  void _scheduleStencilProcessing({bool immediate = false}) {
+    if (_image == null || !_stencilConfig.isEnabled) {
+      _stencilDebounceTimer?.cancel();
+      _processedStencilImage = null;
+      return;
+    }
+
+    final cacheKey =
+        '${_image!.name}_stencil_${_stencilConfig.type.name}_${(_stencilConfig.thresholdValue * 100).round()}_${_stencilConfig.posterizeLevels}_${(_stencilConfig.edgeStrength * 100).round()}';
+
+    if (_stencilCache.containsKey(cacheKey)) {
+      _processedStencilImage = _stencilCache[cacheKey];
+      notifyListeners();
+      return;
+    }
+
+    _stencilDebounceTimer?.cancel();
+    if (immediate) {
+      _runStencilProcessing(cacheKey);
+    } else {
+      _stencilDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+        _runStencilProcessing(cacheKey);
+      });
+    }
+  }
+
+  Future<void> _runStencilProcessing(String cacheKey) async {
+    if (_image == null) return;
+    final requestId = ++_stencilRequestId;
+    _isProcessing = true;
+    notifyListeners();
+
+    try {
+      final processedBytes = await _processingService.processStencil(
+        sourceBytes: _image!.bytes,
+        config: _stencilConfig,
+      );
+
+      if (requestId == _stencilRequestId && _image != null) {
+        final resultModel = ImageModel(
+          bytes: processedBytes,
+          width: _image!.width,
+          height: _image!.height,
+          name: '${_image!.name}_${_stencilConfig.type.name}',
+          path: _image!.path,
+        );
+
+        _stencilCache[cacheKey] = resultModel;
+        _processedStencilImage = resultModel;
+        _isProcessing = false;
+        notifyListeners();
+      }
+    } catch (_) {
+      if (requestId == _stencilRequestId) {
+        _isProcessing = false;
+        notifyListeners();
+      }
+    }
+  }
+
   // --- App Lifecycle ---
 
   Future<void> handleAppLifecycle(AppLifecycleState state) async {
@@ -647,6 +794,7 @@ class TracingViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _stencilDebounceTimer?.cancel();
     _transformationController.dispose();
     _cameraService.dispose();
     _screenService.setSystemUiLocked(false);

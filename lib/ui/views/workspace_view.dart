@@ -7,6 +7,7 @@ import '../widgets/brightness_sheet.dart';
 import '../widgets/camera_feed_view.dart';
 import '../widgets/grid_sheet.dart';
 import '../widgets/locked_toolbar.dart';
+import '../widgets/stencil_sheet.dart';
 import '../widgets/tracing_canvas.dart';
 
 /// The main tracing workspace where the reference image is aligned,
@@ -69,6 +70,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
 
   void _openGrid(BuildContext context) {
     GridSheet.show(context, widget.viewModel);
+  }
+
+  void _openStencil(BuildContext context) {
+    StencilSheet.show(context, widget.viewModel);
   }
 
   @override
@@ -254,6 +259,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                           viewModel: vm,
                           onOpenBrightness: () => _openBrightness(context),
                           onOpenGrid: () => _openGrid(context),
+                          onOpenStencil: () => _openStencil(context),
                         ),
                       ),
                     ),
@@ -388,6 +394,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                           viewModel: vm,
                           onOpenBrightness: () => _openBrightness(context),
                           onOpenGrid: () => _openGrid(context),
+                          onOpenStencil: () => _openStencil(context),
                         ),
                       ),
                     ),

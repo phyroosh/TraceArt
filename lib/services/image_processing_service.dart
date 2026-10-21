@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import '../models/stencil_config.dart';
 
 /// Selectable modes for inverted tracing:
 /// - [original]: Preserves the exact original color inversion.
@@ -96,6 +97,13 @@ abstract class ImageProcessingService {
     required double detailStrength,
     required double edgeSensitivity,
   });
+
+  Future<Uint8List> processStencil({
+    required Uint8List sourceBytes,
+    required StencilConfig config,
+  });
+
+  double computeOtsuThreshold(Uint8List sourceBytes);
 }
 
 /// Parameters passed to the background isolate.
@@ -110,6 +118,17 @@ class ProcessingParams {
     required this.mode,
     required this.detailStrength,
     required this.edgeSensitivity,
+  });
+}
+
+/// Parameters passed to the background isolate for stencil filtering.
+class StencilProcessingParams {
+  final Uint8List sourceBytes;
+  final StencilConfig config;
+
+  const StencilProcessingParams({
+    required this.sourceBytes,
+    required this.config,
   });
 }
 
@@ -134,6 +153,28 @@ class DefaultImageProcessingService implements ImageProcessingService {
     );
 
     return await Isolate.run(() => ImageProcessor.execute(params));
+  }
+
+  @override
+  Future<Uint8List> processStencil({
+    required Uint8List sourceBytes,
+    required StencilConfig config,
+  }) async {
+    if (config.type == StencilFilterType.none) {
+      return sourceBytes;
+    }
+
+    final params = StencilProcessingParams(
+      sourceBytes: sourceBytes,
+      config: config,
+    );
+
+    return await Isolate.run(() => ImageProcessor.executeStencil(params));
+  }
+
+  @override
+  double computeOtsuThreshold(Uint8List sourceBytes) {
+    return ImageProcessor.calculateOtsu(sourceBytes);
   }
 }
 
@@ -169,6 +210,212 @@ class ImageProcessor {
     // Encode to PNG with level 1 for speed while preserving lossless fidelity
     final resultBytes = img.encodePng(processed, level: 1);
     return Uint8List.fromList(resultBytes);
+  }
+
+  /// Entry point called within background isolate for stencil filtering.
+  static Uint8List executeStencil(StencilProcessingParams params) {
+    final decoded = img.decodeImage(params.sourceBytes);
+    if (decoded == null) {
+      throw Exception('Failed to decode image bytes for stencil processing');
+    }
+
+    img.Image processed;
+    switch (params.config.type) {
+      case StencilFilterType.none:
+        processed = decoded;
+        break;
+      case StencilFilterType.threshold:
+        processed = applyThreshold(
+          decoded,
+          threshold: params.config.thresholdValue,
+        );
+        break;
+      case StencilFilterType.posterize:
+        processed = applyPosterize(
+          decoded,
+          levels: params.config.posterizeLevels,
+        );
+        break;
+      case StencilFilterType.edgeSketch:
+        processed = applyEdgeSketch(
+          decoded,
+          edgeStrength: params.config.edgeStrength,
+        );
+        break;
+    }
+
+    final resultBytes = img.encodePng(processed, level: 1);
+    return Uint8List.fromList(resultBytes);
+  }
+
+  /// Calculates optimal bimodal threshold using Otsu's method.
+  static double calculateOtsu(Uint8List sourceBytes) {
+    final decoded = img.decodeImage(sourceBytes);
+    if (decoded == null) return 0.5;
+
+    final width = decoded.width;
+    final height = decoded.height;
+    final totalPixels = width * height;
+    if (totalPixels == 0) return 0.5;
+
+    final histogram = Int32List(256);
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        final p = decoded.getPixel(x, y);
+        final lum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round().clamp(0, 255);
+        histogram[lum]++;
+      }
+    }
+
+    double sumTotal = 0;
+    for (int i = 0; i < 256; i++) {
+      sumTotal += i * histogram[i];
+    }
+
+    double sumB = 0;
+    int wB = 0;
+    double maxVariance = 0.0;
+    int bestThreshold = 128;
+
+    for (int t = 0; t < 256; t++) {
+      wB += histogram[t];
+      if (wB == 0) continue;
+      final wF = totalPixels - wB;
+      if (wF == 0) break;
+
+      sumB += t * histogram[t];
+      final mB = sumB / wB;
+      final mF = (sumTotal - sumB) / wF;
+
+      final varianceBetween = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
+      if (varianceBetween > maxVariance) {
+        maxVariance = varianceBetween;
+        bestThreshold = t;
+      }
+    }
+
+    return (bestThreshold / 255.0).clamp(0.05, 0.95);
+  }
+
+  /// Binary thresholding: values >= threshold become pure white (255),
+  /// values < threshold become pure black ink/stencil (0).
+  static img.Image applyThreshold(
+    img.Image source, {
+    required double threshold,
+  }) {
+    final width = source.width;
+    final height = source.height;
+    final pixelCount = width * height;
+
+    final gray = Float32List(pixelCount);
+    for (int y = 0; y < height; y++) {
+      final row = y * width;
+      for (int x = 0; x < width; x++) {
+        final p = source.getPixel(x, y);
+        gray[row + x] = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+      }
+    }
+
+    final smoothed = _applySeparableBlur(gray, width, height);
+    final cutoff = (threshold.clamp(0.05, 0.95) * 255.0);
+    final output = img.Image(width: width, height: height);
+
+    for (int y = 0; y < height; y++) {
+      final row = y * width;
+      for (int x = 0; x < width; x++) {
+        final lum = smoothed[row + x];
+        final val = lum >= cutoff ? 255 : 0;
+        output.setPixelRgba(x, y, val, val, val, 255);
+      }
+    }
+
+    return output;
+  }
+
+  /// Posterization: quantizes continuous tones into [levels] discrete tonal bands.
+  static img.Image applyPosterize(
+    img.Image source, {
+    required int levels,
+  }) {
+    final width = source.width;
+    final height = source.height;
+    final output = img.Image(width: width, height: height);
+
+    final numLevels = levels.clamp(2, 8);
+    final step = 255.0 / (numLevels - 1);
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        final p = source.getPixel(x, y);
+        final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        final bucket = (lum / 255.0 * (numLevels - 1)).round();
+        final quantized = (bucket * step).clamp(0.0, 255.0).round();
+        output.setPixelRgba(x, y, quantized, quantized, quantized, 255);
+      }
+    }
+
+    return output;
+  }
+
+  /// Edge sketch: extracts clean line art contours (pencil/ink outline style).
+  static img.Image applyEdgeSketch(
+    img.Image source, {
+    required double edgeStrength,
+  }) {
+    final width = source.width;
+    final height = source.height;
+    final pixelCount = width * height;
+
+    final gray = Float32List(pixelCount);
+    for (int y = 0; y < height; y++) {
+      final row = y * width;
+      for (int x = 0; x < width; x++) {
+        final p = source.getPixel(x, y);
+        gray[row + x] = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+      }
+    }
+
+    final blur1 = _applySeparableBlur(gray, width, height);
+    final blur2 = _applySeparableBlur(_applySeparableBlur(blur1, width, height), width, height);
+
+    final mag = Float32List(pixelCount);
+    for (int y = 1; y < height - 1; y++) {
+      final prevRow = (y - 1) * width;
+      final row = y * width;
+      final nextRow = (y + 1) * width;
+
+      for (int x = 1; x < width - 1; x++) {
+        final gx = (3.0 * (blur1[prevRow + x + 1] - blur1[prevRow + x - 1]) +
+                10.0 * (blur1[row + x + 1] - blur1[row + x - 1]) +
+                3.0 * (blur1[nextRow + x + 1] - blur1[nextRow + x - 1])) /
+            32.0;
+
+        final gy = (3.0 * (blur1[nextRow + x - 1] - blur1[prevRow + x - 1]) +
+                10.0 * (blur1[nextRow + x] - blur1[prevRow + x]) +
+                3.0 * (blur1[nextRow + x + 1] - blur1[prevRow + x + 1])) /
+            32.0;
+
+        mag[row + x] = math.sqrt(gx * gx + gy * gy);
+      }
+    }
+
+    final output = img.Image(width: width, height: height);
+    final strength = edgeStrength.clamp(0.1, 1.0);
+
+    for (int y = 0; y < height; y++) {
+      final row = y * width;
+      for (int x = 0; x < width; x++) {
+        final i = row + x;
+        final dog = (blur2[i] - blur1[i]).abs() * 3.0;
+        final edge = mag[i] * 1.5;
+        final signal = math.max(dog, edge) * (0.8 + strength * 1.8);
+
+        final ink = (255.0 - signal * 4.0).clamp(0.0, 255.0).round();
+        output.setPixelRgba(x, y, ink, ink, ink, 255);
+      }
+    }
+
+    return output;
   }
 
   /// Applies unsharp-masking edge sharpening, subtle line contrast enhancement,

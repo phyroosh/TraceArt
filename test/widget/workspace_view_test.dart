@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traceart/models/grid_config.dart';
+import 'package:traceart/models/stencil_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/theme/app_theme.dart';
 import 'package:traceart/ui/views/workspace_view.dart';
@@ -8,6 +9,7 @@ import 'package:traceart/ui/widgets/alignment_toolbar.dart';
 import 'package:traceart/ui/widgets/camera_feed_view.dart';
 import 'package:traceart/ui/widgets/grid_painter.dart';
 import 'package:traceart/ui/widgets/locked_toolbar.dart';
+import 'package:traceart/ui/widgets/stencil_sheet.dart';
 import 'package:traceart/ui/widgets/tracing_canvas.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
 import '../mocks/fake_camera_service.dart';
@@ -444,6 +446,91 @@ void main() {
 
     expect(viewModel.isTorchOn, isTrue);
     expect(cameraService.toggleTorchCalls, equals(1));
+  });
+
+  testWidgets(
+      'tapping stencil button in AlignmentToolbar opens StencilSheet and configures modes',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // 1. Verify stencil button is visible on toolbar and tap it
+    final stencilBtn = find.byKey(const Key('stencil_toolbar_button'));
+    expect(stencilBtn, findsOneWidget);
+    await tester.tap(stencilBtn);
+    await tester.pumpAndSettle();
+
+    // 2. Verify StencilSheet opened
+    expect(find.byType(StencilSheet), findsOneWidget);
+    expect(find.text('Quick Stencil Filters'), findsOneWidget);
+    expect(find.text('Original'), findsOneWidget);
+    expect(find.text('B&W Stencil'), findsOneWidget);
+    expect(find.text('Posterize'), findsOneWidget);
+    expect(find.text('Edge Sketch'), findsOneWidget);
+
+    // 3. Select B&W Stencil
+    await tester.tap(find.text('B&W Stencil'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.stencilConfig.type, equals(StencilFilterType.threshold));
+    expect(find.text('Threshold Cutoff'), findsOneWidget);
+    expect(find.byKey(const Key('stencil_threshold_slider')), findsOneWidget);
+    expect(find.byKey(const Key('stencil_auto_otsu_button')), findsOneWidget);
+
+    // 4. Tap Auto Otsu button
+    processingService.nextOtsuThreshold = 0.45;
+    await tester.tap(find.byKey(const Key('stencil_auto_otsu_button')));
+    await tester.pumpAndSettle();
+
+    expect(processingService.otsuCallCount, equals(1));
+    expect(viewModel.stencilConfig.threshold, closeTo(0.45, 0.01));
+
+    // 5. Select Posterize
+    await tester.tap(find.text('Posterize'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.stencilConfig.type, equals(StencilFilterType.posterize));
+    expect(find.text('Tonal Shading Steps'), findsOneWidget);
+    expect(find.byKey(const Key('stencil_posterize_chip_6')), findsOneWidget);
+
+    // Tap 6 Steps
+    await tester.tap(find.byKey(const Key('stencil_posterize_chip_6')));
+    await tester.pumpAndSettle();
+    expect(viewModel.stencilConfig.posterizeLevels, equals(6));
+
+    // 6. Select Edge Sketch
+    await tester.tap(find.text('Edge Sketch'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.stencilConfig.type, equals(StencilFilterType.edgeSketch));
+    expect(find.text('Line Weight & Sensitivity'), findsOneWidget);
+    expect(find.byKey(const Key('stencil_edge_slider')), findsOneWidget);
+  });
+
+  testWidgets(
+      'in locked mode 3-dot options provides locked stencil button that opens StencilSheet',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // Lock canvas
+    await tester.tap(find.byKey(const Key('lock_canvas_button')));
+    await tester.pumpAndSettle();
+    expect(viewModel.isLocked, isTrue);
+
+    // Open locked options menu via 3-dot
+    await tester.tap(find.byKey(const Key('locked_menu_button')));
+    await tester.pumpAndSettle();
+
+    // Verify locked stencil button is present
+    final lockedStencilBtn = find.byKey(const Key('locked_stencil_button'));
+    expect(lockedStencilBtn, findsOneWidget);
+
+    // Tap locked stencil button
+    await tester.tap(lockedStencilBtn);
+    await tester.pumpAndSettle();
+
+    // Verify StencilSheet opens even while canvas is locked
+    expect(find.byType(StencilSheet), findsOneWidget);
+    expect(find.text('Quick Stencil Filters'), findsOneWidget);
   });
 }
 

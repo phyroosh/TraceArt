@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:traceart/models/image_model.dart';
+import 'package:traceart/models/stencil_config.dart';
 import 'package:traceart/services/image_picker_service.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/services/screen_service.dart';
@@ -101,6 +102,13 @@ class FakeImageProcessingService implements ImageProcessingService {
   double? lastSensitivity;
   Uint8List? customResultBytes;
 
+  int stencilCallCount = 0;
+  StencilConfig? lastStencilConfig;
+  double otsuReturnValue = 0.5;
+  int otsuCallCount = 0;
+
+  set nextOtsuThreshold(double val) => otsuReturnValue = val;
+
   @override
   Future<Uint8List> processImage({
     required Uint8List sourceBytes,
@@ -114,5 +122,22 @@ class FakeImageProcessingService implements ImageProcessingService {
     lastSensitivity = edgeSensitivity;
     if (mode == InvertTracingMode.original) return sourceBytes;
     return customResultBytes ?? sourceBytes;
+  }
+
+  @override
+  Future<Uint8List> processStencil({
+    required Uint8List sourceBytes,
+    required StencilConfig config,
+  }) async {
+    stencilCallCount++;
+    lastStencilConfig = config;
+    if (config.type == StencilFilterType.none) return sourceBytes;
+    return customResultBytes ?? sourceBytes;
+  }
+
+  @override
+  double computeOtsuThreshold(Uint8List sourceBytes) {
+    otsuCallCount++;
+    return otsuReturnValue;
   }
 }

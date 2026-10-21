@@ -9,12 +9,14 @@ class LockedToolbar extends StatelessWidget {
   final TracingViewModel viewModel;
   final VoidCallback onOpenBrightness;
   final VoidCallback onOpenGrid;
+  final VoidCallback onOpenStencil;
 
   const LockedToolbar({
     super.key,
     required this.viewModel,
     required this.onOpenBrightness,
     required this.onOpenGrid,
+    required this.onOpenStencil,
   });
 
   @override
@@ -105,6 +107,25 @@ class LockedToolbar extends StatelessWidget {
                 size: 22,
               ),
               onPressed: onOpenGrid,
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Quick Stencil Button
+          Tooltip(
+            message: 'Quick Stencil Filters',
+            child: IconButton(
+              key: const Key('locked_stencil_button'),
+              icon: Icon(
+                viewModel.isStencilActive
+                    ? Icons.auto_fix_high_rounded
+                    : Icons.auto_fix_normal_rounded,
+                color: viewModel.isStencilActive
+                    ? AppTheme.primary
+                    : AppTheme.textSecondary,
+                size: 22,
+              ),
+              onPressed: onOpenStencil,
             ),
           ),
           const SizedBox(width: 4),

@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traceart/models/grid_config.dart';
+import 'package:traceart/models/stencil_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
 import '../mocks/fake_camera_service.dart';
@@ -686,6 +687,130 @@ void main() {
       expect(viewModel.tracingMode, equals(TracingMode.lightBox));
       expect(viewModel.isArMode, isFalse);
       expect(cameraService.disposeCalls, greaterThan(0));
+    });
+  });
+
+  group('Quick Stencil & Threshold Filters', () {
+    test('initial stencil state is inactive with none type', () {
+      expect(viewModel.isStencilActive, isFalse);
+      expect(viewModel.stencilConfig.type, equals(StencilFilterType.none));
+      expect(viewModel.stencilConfig.threshold, equals(0.5));
+      expect(viewModel.stencilConfig.posterizeLevels, equals(4));
+      expect(viewModel.stencilConfig.edgeStrength, equals(0.5));
+      expect(viewModel.processedStencilImage, isNull);
+    });
+
+    test('setting stencil type updates config and triggers background processing', () async {
+      viewModel.setImage(createSampleImage());
+      expect(viewModel.isStencilActive, isFalse);
+
+      viewModel.setStencilType(StencilFilterType.threshold);
+      expect(viewModel.stencilConfig.type, equals(StencilFilterType.threshold));
+      expect(viewModel.isStencilActive, isTrue);
+
+      // Wait for debounce timer (150ms) + fake processing
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(processingService.stencilCallCount, greaterThan(0));
+      expect(viewModel.processedStencilImage, isNotNull);
+      expect(viewModel.activeDisplayImage, equals(viewModel.processedStencilImage));
+    });
+
+    test('setStencilThreshold clamps value within 0.05 - 0.95 and debounces processing', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setStencilType(StencilFilterType.threshold);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final initialCalls = processingService.stencilCallCount;
+
+      // Lower clamp
+      viewModel.setStencilThreshold(0.01);
+      expect(viewModel.stencilConfig.threshold, equals(0.05));
+
+      // Upper clamp
+      viewModel.setStencilThreshold(0.99);
+      expect(viewModel.stencilConfig.threshold, equals(0.95));
+
+      // Normal value
+      viewModel.setStencilThreshold(0.7);
+      expect(viewModel.stencilConfig.threshold, equals(0.7));
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(processingService.stencilCallCount, greaterThan(initialCalls));
+    });
+
+    test('setStencilPosterizeLevels updates levels and triggers processing', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setStencilType(StencilFilterType.posterize);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      viewModel.setStencilPosterizeLevels(6);
+      expect(viewModel.stencilConfig.posterizeLevels, equals(6));
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(viewModel.processedStencilImage, isNotNull);
+    });
+
+    test('setStencilEdgeStrength clamps within 0.1 - 1.0 and triggers processing', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setStencilType(StencilFilterType.edgeSketch);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      viewModel.setStencilEdgeStrength(0.05); // clamped to 0.1
+      expect(viewModel.stencilConfig.edgeStrength, equals(0.1));
+
+      viewModel.setStencilEdgeStrength(1.5); // clamped to 1.0
+      expect(viewModel.stencilConfig.edgeStrength, equals(1.0));
+
+      viewModel.setStencilEdgeStrength(0.8);
+      expect(viewModel.stencilConfig.edgeStrength, equals(0.8));
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(viewModel.processedStencilImage, isNotNull);
+    });
+
+    test('applyAutoOtsuThreshold computes optimal bimodal cutoff and updates config', () async {
+      viewModel.setImage(createSampleImage());
+      processingService.nextOtsuThreshold = 0.42;
+
+      viewModel.applyAutoOtsuThreshold();
+
+      expect(processingService.otsuCallCount, equals(1));
+      expect(viewModel.stencilConfig.threshold, closeTo(0.42, 0.001));
+    });
+
+    test('switching back to StencilFilterType.none clears processedStencilImage', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setStencilType(StencilFilterType.threshold);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(viewModel.isStencilActive, isTrue);
+      expect(viewModel.processedStencilImage, isNotNull);
+
+      viewModel.setStencilType(StencilFilterType.none);
+      expect(viewModel.isStencilActive, isFalse);
+      expect(viewModel.processedStencilImage, isNull);
+      expect(viewModel.activeDisplayImage, equals(viewModel.image));
+    });
+
+    test('clearImage resets stencil configuration to defaults and evicts cache', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.setStencilConfig(const StencilConfig(
+        type: StencilFilterType.posterize,
+        threshold: 0.7,
+        posterizeLevels: 8,
+        edgeStrength: 0.9,
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      await viewModel.clearImage();
+
+      expect(viewModel.isStencilActive, isFalse);
+      expect(viewModel.stencilConfig.type, equals(StencilFilterType.none));
+      expect(viewModel.stencilConfig.threshold, equals(0.5));
+      expect(viewModel.stencilConfig.posterizeLevels, equals(4));
+      expect(viewModel.stencilConfig.edgeStrength, equals(0.5));
+      expect(viewModel.processedStencilImage, isNull);
     });
   });
 }

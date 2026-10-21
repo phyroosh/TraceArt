@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -10,16 +11,22 @@ abstract class ScreenService {
   Future<void> setMaxBrightness();
   Future<void> restoreBrightness();
   Future<void> setKeepAwake(bool enable);
+  Future<void> setSystemUiLocked(bool locked);
   bool get isKeepAwake;
+  bool get isSystemUiLocked;
   double get currentBrightness;
   bool get isBrightnessSupported;
 }
 
 class DefaultScreenService implements ScreenService {
+  static const MethodChannel _systemLockChannel =
+      MethodChannel('com.traceart/system_lock');
+
   final ScreenBrightness _screenBrightness;
   double _currentBrightness = 1.0;
   double? _initialBrightness;
   bool _isKeepAwake = false;
+  bool _isSystemUiLocked = false;
   bool _isBrightnessSupported = true;
 
   DefaultScreenService({ScreenBrightness? screenBrightness})
@@ -30,6 +37,9 @@ class DefaultScreenService implements ScreenService {
 
   @override
   bool get isKeepAwake => _isKeepAwake;
+
+  @override
+  bool get isSystemUiLocked => _isSystemUiLocked;
 
   @override
   bool get isBrightnessSupported => _isBrightnessSupported;
@@ -109,6 +119,30 @@ class DefaultScreenService implements ScreenService {
       }
     } catch (e) {
       debugPrint('Error setting wakelock: $e');
+    }
+  }
+
+  @override
+  Future<void> setSystemUiLocked(bool locked) async {
+    _isSystemUiLocked = locked;
+    try {
+      if (locked) {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        try {
+          await _systemLockChannel.invokeMethod('startLockTask');
+        } catch (e) {
+          debugPrint('Native startLockTask failed or unsupported: $e');
+        }
+      } else {
+        try {
+          await _systemLockChannel.invokeMethod('stopLockTask');
+        } catch (e) {
+          debugPrint('Native stopLockTask failed or unsupported: $e');
+        }
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    } catch (e) {
+      debugPrint('Error toggling system UI lock: $e');
     }
   }
 }

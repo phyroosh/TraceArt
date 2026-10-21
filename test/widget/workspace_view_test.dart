@@ -201,4 +201,50 @@ void main() {
     expect(find.text('Detail Strength'), findsOneWidget);
     expect(find.text('Edge Sensitivity'), findsOneWidget);
   });
+
+  testWidgets('back navigation shows exit dialog when unlocked but is swallowed when locked',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // 1. Unlocked mode: trigger back pop
+    final dynamic widgetsAppState = tester.state(find.byType(WidgetsApp));
+    await widgetsAppState.didPopRoute();
+    await tester.pumpAndSettle();
+
+    // Must show exit dialog
+    expect(find.text('Exit Tracing Session?'), findsOneWidget);
+
+    // Dismiss dialog with 'Stay'
+    await tester.tap(find.text('Stay'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exit Tracing Session?'), findsNothing);
+
+    // 2. Lock the canvas
+    final lockButton = find.byKey(const Key('lock_canvas_button'));
+    await tester.tap(lockButton);
+    await tester.pumpAndSettle();
+    expect(viewModel.isLocked, isTrue);
+
+    // Trigger back pop while locked
+    await widgetsAppState.didPopRoute();
+    await tester.pumpAndSettle();
+
+    // MUST NOT show exit dialog!
+    expect(find.text('Exit Tracing Session?'), findsNothing);
+
+    // 3. Open 3-dot menu while locked
+    final menuButton = find.byKey(const Key('locked_menu_button'));
+    await tester.tap(menuButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Screen Locked'), findsOneWidget);
+
+    // Trigger back pop while 3-dot options are open
+    await widgetsAppState.didPopRoute();
+    await tester.pumpAndSettle();
+
+    // 3-dot menu must close, but still NO exit dialog!
+    expect(find.text('Screen Locked'), findsNothing);
+    expect(find.text('Exit Tracing Session?'), findsNothing);
+    expect(viewModel.isLocked, isTrue);
+  });
 }

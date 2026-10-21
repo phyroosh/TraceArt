@@ -171,6 +171,7 @@ class TracingViewModel extends ChangeNotifier {
     _quarterTurns = 0;
     _hasCalculatedInitialFit = false;
     _transformationController.value = Matrix4.identity();
+    await _screenService.setSystemUiLocked(false);
     await _screenService.restoreBrightness();
     await _screenService.setKeepAwake(false);
     notifyListeners();
@@ -288,7 +289,10 @@ class TracingViewModel extends ChangeNotifier {
     if (_isLocked) {
       // Ensure keep-awake is active during tracing
       _screenService.setKeepAwake(true);
+      _screenService.setSystemUiLocked(true);
       _keepAwake = true;
+    } else {
+      _screenService.setSystemUiLocked(false);
     }
     notifyListeners();
   }
@@ -298,7 +302,10 @@ class TracingViewModel extends ChangeNotifier {
     _isLocked = locked;
     if (_isLocked) {
       _screenService.setKeepAwake(true);
+      _screenService.setSystemUiLocked(true);
       _keepAwake = true;
+    } else {
+      _screenService.setSystemUiLocked(false);
     }
     notifyListeners();
   }
@@ -454,6 +461,9 @@ class TracingViewModel extends ChangeNotifier {
       if (_keepAwake) {
         await _screenService.setKeepAwake(true);
       }
+      if (_isLocked) {
+        await _screenService.setSystemUiLocked(true);
+      }
     }
   }
 
@@ -461,6 +471,7 @@ class TracingViewModel extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     _transformationController.dispose();
+    _screenService.setSystemUiLocked(false);
     _screenService.restoreBrightness();
     _screenService.setKeepAwake(false);
     super.dispose();

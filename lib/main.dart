@@ -17,6 +17,7 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   runApp(const TraceArtApp());
 }

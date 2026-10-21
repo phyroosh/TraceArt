@@ -77,6 +77,13 @@ class _WorkspaceViewState extends State<WorkspaceView> {
           canPop: false,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
+            if (vm.isLocked) {
+              if (_showLockedOptions) {
+                setState(() => _showLockedOptions = false);
+              }
+              // Completely block and ignore back navigation while tracing is locked
+              return;
+            }
             _confirmExit(context);
           },
           child: Scaffold(

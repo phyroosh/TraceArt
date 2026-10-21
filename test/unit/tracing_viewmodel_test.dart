@@ -119,15 +119,53 @@ void main() {
       expect(viewModel.transformationController.value, isNot(equals(matrixBeforeLock)));
     });
 
-    test('locking canvas activates keepAwake for tracing', () {
+    test('locking canvas activates keepAwake and systemUiLocked for tracing', () {
       viewModel.setImage(createSampleImage());
       screenService.keepAwakeState = false;
+      screenService.systemUiLockedState = false;
 
       viewModel.toggleLock();
 
       expect(viewModel.isLocked, isTrue);
       expect(viewModel.keepAwake, isTrue);
       expect(screenService.keepAwakeState, isTrue);
+      expect(screenService.systemUiLockedState, isTrue);
+
+      viewModel.toggleLock();
+
+      expect(viewModel.isLocked, isFalse);
+      expect(screenService.systemUiLockedState, isFalse);
+    });
+
+    test('clearImage and dispose reset systemUiLocked', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.toggleLock();
+      expect(screenService.systemUiLockedState, isTrue);
+
+      await viewModel.clearImage();
+      expect(screenService.systemUiLockedState, isFalse);
+
+      final tempVm = TracingViewModel(
+        pickerService: pickerService,
+        screenService: screenService,
+        processingService: processingService,
+      );
+      tempVm.setImage(createSampleImage());
+      tempVm.toggleLock();
+      expect(screenService.systemUiLockedState, isTrue);
+
+      tempVm.dispose();
+      expect(screenService.systemUiLockedState, isFalse);
+    });
+
+    test('resuming app while locked re-asserts systemUiLocked', () async {
+      viewModel.setImage(createSampleImage());
+      viewModel.toggleLock();
+      expect(screenService.systemUiLockedState, isTrue);
+
+      screenService.systemUiLockedState = false;
+      await viewModel.handleAppLifecycle(AppLifecycleState.resumed);
+      expect(screenService.systemUiLockedState, isTrue);
     });
   });
 

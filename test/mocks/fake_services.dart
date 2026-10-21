@@ -42,13 +42,18 @@ class FakeScreenService implements ScreenService {
   double current = 0.5;
   double? initial = 0.5;
   bool keepAwakeState = false;
+  bool systemUiLockedState = false;
   int restoreCalls = 0;
+  int setSystemUiLockedCalls = 0;
 
   @override
   double get currentBrightness => current;
 
   @override
   bool get isKeepAwake => keepAwakeState;
+
+  @override
+  bool get isSystemUiLocked => systemUiLockedState;
 
   @override
   bool get isBrightnessSupported => true;
@@ -80,6 +85,12 @@ class FakeScreenService implements ScreenService {
   @override
   Future<void> setKeepAwake(bool enable) async {
     keepAwakeState = enable;
+  }
+
+  @override
+  Future<void> setSystemUiLocked(bool locked) async {
+    setSystemUiLockedCalls++;
+    systemUiLockedState = locked;
   }
 }
 

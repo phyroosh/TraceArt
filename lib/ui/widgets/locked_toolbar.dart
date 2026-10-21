@@ -8,11 +8,13 @@ import '../../viewmodels/tracing_viewmodel.dart';
 class LockedToolbar extends StatelessWidget {
   final TracingViewModel viewModel;
   final VoidCallback onOpenBrightness;
+  final VoidCallback onOpenGrid;
 
   const LockedToolbar({
     super.key,
     required this.viewModel,
     required this.onOpenBrightness,
+    required this.onOpenGrid,
   });
 
   @override
@@ -84,6 +86,25 @@ class LockedToolbar extends StatelessWidget {
                 size: 22,
               ),
               onPressed: onOpenBrightness,
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Quick Grid Button
+          Tooltip(
+            message: 'Drawing Grid Overlay',
+            child: IconButton(
+              key: const Key('locked_grid_button'),
+              icon: Icon(
+                viewModel.isGridEnabled
+                    ? Icons.grid_on_rounded
+                    : Icons.grid_4x4_rounded,
+                color: viewModel.isGridEnabled
+                    ? AppTheme.primary
+                    : AppTheme.textSecondary,
+                size: 22,
+              ),
+              onPressed: onOpenGrid,
             ),
           ),
           const SizedBox(width: 6),

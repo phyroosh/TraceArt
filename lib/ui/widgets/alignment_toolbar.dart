@@ -7,11 +7,13 @@ import '../../viewmodels/tracing_viewmodel.dart';
 class AlignmentToolbar extends StatelessWidget {
   final TracingViewModel viewModel;
   final VoidCallback onOpenBrightness;
+  final VoidCallback onOpenGrid;
 
   const AlignmentToolbar({
     super.key,
     required this.viewModel,
     required this.onOpenBrightness,
+    required this.onOpenGrid,
   });
 
   @override
@@ -80,6 +82,19 @@ class AlignmentToolbar extends StatelessWidget {
             tooltip: 'Display & Brightness',
             onPressed: onOpenBrightness,
           ),
+
+          // Drawing Grid toggle / configure
+          _buildIconButton(
+            key: const Key('grid_toolbar_button'),
+            icon: viewModel.isGridEnabled
+                ? Icons.grid_on_rounded
+                : Icons.grid_4x4_rounded,
+            tooltip: 'Drawing Grid Overlay',
+            color: viewModel.isGridEnabled
+                ? AppTheme.primary
+                : AppTheme.textPrimary,
+            onPressed: onOpenGrid,
+          ),
           const SizedBox(width: 6),
 
           // Primary Action: Lock Canvas
@@ -112,15 +127,18 @@ class AlignmentToolbar extends StatelessWidget {
   }
 
   Widget _buildIconButton({
+    Key? key,
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
+    Color? color,
   }) {
     return Tooltip(
       message: tooltip,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          key: key,
           borderRadius: BorderRadius.circular(12),
           onTap: onPressed,
           child: Padding(
@@ -128,7 +146,7 @@ class AlignmentToolbar extends StatelessWidget {
             child: Icon(
               icon,
               size: 22,
-              color: AppTheme.textPrimary,
+              color: color ?? AppTheme.textPrimary,
             ),
           ),
         ),

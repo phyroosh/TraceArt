@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traceart/models/grid_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/theme/app_theme.dart';
 import 'package:traceart/ui/views/workspace_view.dart';
 import 'package:traceart/ui/widgets/alignment_toolbar.dart';
+import 'package:traceart/ui/widgets/grid_painter.dart';
 import 'package:traceart/ui/widgets/locked_toolbar.dart';
 import 'package:traceart/ui/widgets/tracing_canvas.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
@@ -271,4 +273,80 @@ void main() {
     expect(find.text('Exit Tracing Session?'), findsNothing);
     expect(viewModel.isLocked, isTrue);
   });
+
+  testWidgets('tapping Grid button in AlignmentToolbar opens GridSheet and configures overlay',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // Initially no GridPainter rendered because grid is disabled
+    expect(find.byType(CustomPaint), findsWidgets);
+    expect(
+      find.byWidgetPredicate((w) => w is CustomPaint && w.painter is GridPainter),
+      findsNothing,
+    );
+
+    // Tap Grid button in AlignmentToolbar
+    final gridBtn = find.byKey(const Key('grid_toolbar_button'));
+    expect(gridBtn, findsOneWidget);
+    await tester.tap(gridBtn);
+    await tester.pumpAndSettle();
+
+    // Verify GridSheet is displayed
+    expect(find.text('Drawing Grid Overlay'), findsOneWidget);
+    expect(find.text('Show Proportional Grid'), findsOneWidget);
+
+    // Tap Enable Grid tile
+    await tester.tap(find.byKey(const Key('grid_enable_tile')));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isGridEnabled, isTrue);
+
+    // GridPainter must now be rendered on the canvas
+    expect(
+      find.byWidgetPredicate((w) => w is CustomPaint && w.painter is GridPainter),
+      findsOneWidget,
+    );
+
+    // Select 8x8 divisions preset chip
+    final chip8 = find.byKey(const Key('grid_division_chip_8'));
+    expect(chip8, findsOneWidget);
+    await tester.tap(chip8);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.gridConfig.divisions, equals(8));
+
+    // Select Cyan color preset
+    final cyanChip = find.byKey(const Key('grid_color_cyan'));
+    expect(cyanChip, findsOneWidget);
+    await tester.tap(cyanChip);
+    await tester.pumpAndSettle();
+
+    expect(viewModel.gridConfig.colorPreset, equals(GridColor.cyan));
+  });
+
+  testWidgets('locked toolbar provides Grid button allowing grid adjustment while tracing',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    // Lock canvas
+    await tester.tap(find.byKey(const Key('lock_canvas_button')));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.isLocked, isTrue);
+
+    // Open locked options menu via 3-dot
+    await tester.tap(find.byKey(const Key('locked_menu_button')));
+    await tester.pumpAndSettle();
+
+    // Verify locked grid button exists in LockedToolbar
+    final lockedGridBtn = find.byKey(const Key('locked_grid_button'));
+    expect(lockedGridBtn, findsOneWidget);
+
+    // Tap locked grid button to open GridSheet
+    await tester.tap(lockedGridBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Drawing Grid Overlay'), findsOneWidget);
+  });
 }
+

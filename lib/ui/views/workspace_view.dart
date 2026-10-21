@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
 import '../widgets/alignment_toolbar.dart';
 import '../widgets/brightness_sheet.dart';
+import '../widgets/grid_sheet.dart';
 import '../widgets/locked_toolbar.dart';
 import '../widgets/tracing_canvas.dart';
 
@@ -63,6 +64,10 @@ class _WorkspaceViewState extends State<WorkspaceView> {
 
   void _openBrightness(BuildContext context) {
     BrightnessSheet.show(context, widget.viewModel);
+  }
+
+  void _openGrid(BuildContext context) {
+    GridSheet.show(context, widget.viewModel);
   }
 
   @override
@@ -211,6 +216,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                         child: AlignmentToolbar(
                           viewModel: vm,
                           onOpenBrightness: () => _openBrightness(context),
+                          onOpenGrid: () => _openGrid(context),
                         ),
                       ),
                     ),
@@ -344,6 +350,7 @@ class _WorkspaceViewState extends State<WorkspaceView> {
                         child: LockedToolbar(
                           viewModel: vm,
                           onOpenBrightness: () => _openBrightness(context),
+                          onOpenGrid: () => _openGrid(context),
                         ),
                       ),
                     ),

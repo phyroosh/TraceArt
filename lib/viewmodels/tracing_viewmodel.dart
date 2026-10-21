@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../models/grid_config.dart';
 import '../models/image_model.dart';
 import '../services/image_picker_service.dart';
 import '../services/image_processing_service.dart';
@@ -12,6 +13,7 @@ import '../services/screen_service.dart';
 /// - Lock / Unlock enforcement
 /// - Brightness & Screen Keep-Awake controls
 /// - Inverted contrast mode for line tracing
+/// - Proportional drawing grid overlay
 class TracingViewModel extends ChangeNotifier {
   final ImagePickerService _pickerService;
   final ScreenService _screenService;
@@ -34,6 +36,10 @@ class TracingViewModel extends ChangeNotifier {
   bool _keepAwake = true;
   bool _isInverted = false;
   bool _hasCalculatedInitialFit = false;
+
+  // Drawing Grid Overlay state
+  bool _isGridEnabled = false;
+  GridConfig _gridConfig = const GridConfig();
 
   // Fine Detail Mode state
   InvertTracingMode _invertMode = InvertTracingMode.original;
@@ -89,6 +95,9 @@ class TracingViewModel extends ChangeNotifier {
   double get detailStrength => _detailStrength;
   double get edgeSensitivity => _edgeSensitivity;
   bool get isProcessing => _isProcessing;
+
+  bool get isGridEnabled => _isGridEnabled;
+  GridConfig get gridConfig => _gridConfig;
 
   /// Effective size of the image accounting for 90-degree rotations
   Size get effectiveImageSize {
@@ -388,6 +397,73 @@ class TracingViewModel extends ChangeNotifier {
   void setLineColorTint(LineColorTint tint) {
     if (_lineColorTint == tint) return;
     _lineColorTint = tint;
+    notifyListeners();
+  }
+
+  // --- Drawing Grid Overlay Controls ---
+
+  void toggleGrid() {
+    _isGridEnabled = !_isGridEnabled;
+    notifyListeners();
+  }
+
+  void setGridEnabled(bool enabled) {
+    if (_isGridEnabled == enabled) return;
+    _isGridEnabled = enabled;
+    notifyListeners();
+  }
+
+  void updateGridConfig(GridConfig config) {
+    if (_gridConfig == config) return;
+    _gridConfig = config;
+    notifyListeners();
+  }
+
+  void setGridDivisions(int divisions) {
+    final clamped = divisions.clamp(2, 16);
+    if (_gridConfig.divisions == clamped) return;
+    _gridConfig = _gridConfig.copyWith(divisions: clamped);
+    notifyListeners();
+  }
+
+  void setGridOpacity(double opacity) {
+    final clamped = opacity.clamp(0.15, 1.0);
+    if ((_gridConfig.opacity - clamped).abs() < 0.005) return;
+    _gridConfig = _gridConfig.copyWith(opacity: clamped);
+    notifyListeners();
+  }
+
+  void setGridStrokeWidth(double strokeWidth) {
+    final clamped = strokeWidth.clamp(0.5, 4.0);
+    if ((_gridConfig.strokeWidth - clamped).abs() < 0.05) return;
+    _gridConfig = _gridConfig.copyWith(strokeWidth: clamped);
+    notifyListeners();
+  }
+
+  void setGridColor(GridColor colorPreset) {
+    if (_gridConfig.colorPreset == colorPreset) return;
+    _gridConfig = _gridConfig.copyWith(colorPreset: colorPreset);
+    notifyListeners();
+  }
+
+  void toggleGridCenterCrosshair() {
+    _gridConfig = _gridConfig.copyWith(
+      showCenterCrosshair: !_gridConfig.showCenterCrosshair,
+    );
+    notifyListeners();
+  }
+
+  void toggleGridDiagonals() {
+    _gridConfig = _gridConfig.copyWith(
+      showDiagonals: !_gridConfig.showDiagonals,
+    );
+    notifyListeners();
+  }
+
+  void toggleGridLabels() {
+    _gridConfig = _gridConfig.copyWith(
+      showLabels: !_gridConfig.showLabels,
+    );
     notifyListeners();
   }
 

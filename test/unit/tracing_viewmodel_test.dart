@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traceart/models/grid_config.dart';
 import 'package:traceart/services/image_processing_service.dart';
 import 'package:traceart/viewmodels/tracing_viewmodel.dart';
 import '../mocks/fake_services.dart';
@@ -453,6 +454,135 @@ void main() {
 
       expect(viewModel.processedImage, isNull);
       expect(viewModel.activeDisplayImage, isNull);
+    });
+  });
+
+  group('Proportional Drawing Grid Overlay Tests', () {
+    test('initial state has grid disabled and default GridConfig', () {
+      expect(viewModel.isGridEnabled, isFalse);
+      expect(viewModel.gridConfig.divisions, equals(4));
+      expect(viewModel.gridConfig.opacity, equals(0.6));
+      expect(viewModel.gridConfig.colorPreset, equals(GridColor.white));
+      expect(viewModel.gridConfig.showCenterCrosshair, isFalse);
+      expect(viewModel.gridConfig.showDiagonals, isFalse);
+      expect(viewModel.gridConfig.showLabels, isFalse);
+    });
+
+    test('toggleGrid flips isGridEnabled', () {
+      bool notified = false;
+      viewModel.addListener(() => notified = true);
+
+      viewModel.toggleGrid();
+      expect(viewModel.isGridEnabled, isTrue);
+      expect(notified, isTrue);
+
+      notified = false;
+      viewModel.toggleGrid();
+      expect(viewModel.isGridEnabled, isFalse);
+      expect(notified, isTrue);
+    });
+
+    test('setGridEnabled sets state and notifies only when changed', () {
+      int notifyCount = 0;
+      viewModel.addListener(() => notifyCount++);
+
+      viewModel.setGridEnabled(true);
+      expect(viewModel.isGridEnabled, isTrue);
+      expect(notifyCount, equals(1));
+
+      viewModel.setGridEnabled(true);
+      expect(notifyCount, equals(1)); // no duplicate notification
+
+      viewModel.setGridEnabled(false);
+      expect(viewModel.isGridEnabled, isFalse);
+      expect(notifyCount, equals(2));
+    });
+
+    test('setGridDivisions clamps divisions within 2..16', () {
+      viewModel.setGridDivisions(8);
+      expect(viewModel.gridConfig.divisions, equals(8));
+
+      viewModel.setGridDivisions(1);
+      expect(viewModel.gridConfig.divisions, equals(2));
+
+      viewModel.setGridDivisions(25);
+      expect(viewModel.gridConfig.divisions, equals(16));
+    });
+
+    test('setGridOpacity clamps opacity within 0.15..1.0', () {
+      viewModel.setGridOpacity(0.8);
+      expect(viewModel.gridConfig.opacity, closeTo(0.8, 0.01));
+
+      viewModel.setGridOpacity(0.05);
+      expect(viewModel.gridConfig.opacity, closeTo(0.15, 0.01));
+
+      viewModel.setGridOpacity(1.5);
+      expect(viewModel.gridConfig.opacity, closeTo(1.0, 0.01));
+    });
+
+    test('setGridColor updates color preset', () {
+      viewModel.setGridColor(GridColor.cyan);
+      expect(viewModel.gridConfig.colorPreset, equals(GridColor.cyan));
+      expect(viewModel.gridConfig.activeColor.toARGB32(), isNotNull);
+
+      viewModel.setGridColor(GridColor.amber);
+      expect(viewModel.gridConfig.colorPreset, equals(GridColor.amber));
+    });
+
+    test('auxiliary guides toggle functions work correctly', () {
+      expect(viewModel.gridConfig.showCenterCrosshair, isFalse);
+      viewModel.toggleGridCenterCrosshair();
+      expect(viewModel.gridConfig.showCenterCrosshair, isTrue);
+      viewModel.toggleGridCenterCrosshair();
+      expect(viewModel.gridConfig.showCenterCrosshair, isFalse);
+
+      expect(viewModel.gridConfig.showDiagonals, isFalse);
+      viewModel.toggleGridDiagonals();
+      expect(viewModel.gridConfig.showDiagonals, isTrue);
+      viewModel.toggleGridDiagonals();
+      expect(viewModel.gridConfig.showDiagonals, isFalse);
+
+      expect(viewModel.gridConfig.showLabels, isFalse);
+      viewModel.toggleGridLabels();
+      expect(viewModel.gridConfig.showLabels, isTrue);
+      viewModel.toggleGridLabels();
+      expect(viewModel.gridConfig.showLabels, isFalse);
+    });
+
+    test('updateGridConfig sets complete config', () {
+      const customConfig = GridConfig(
+        divisions: 6,
+        opacity: 0.9,
+        strokeWidth: 2.0,
+        colorPreset: GridColor.neonGreen,
+        showCenterCrosshair: true,
+        showDiagonals: true,
+        showLabels: true,
+      );
+
+      viewModel.updateGridConfig(customConfig);
+      expect(viewModel.gridConfig, equals(customConfig));
+      expect(viewModel.gridConfig.divisions, equals(6));
+      expect(viewModel.gridConfig.colorPreset, equals(GridColor.neonGreen));
+    });
+
+    test('GridConfig copyWith and equality', () {
+      const c1 = GridConfig(divisions: 4, opacity: 0.5);
+      final c2 = c1.copyWith(divisions: 8);
+      expect(c2.divisions, equals(8));
+      expect(c2.opacity, equals(0.5));
+      expect(c1 == c2, isFalse);
+
+      final c3 = c1.copyWith();
+      expect(c1 == c3, isTrue);
+      expect(c1.hashCode, equals(c3.hashCode));
+    });
+
+    test('GridColor presets have valid labels and colors', () {
+      for (final color in GridColor.values) {
+        expect(color.label.isNotEmpty, isTrue);
+        expect(color.color.a, equals(1.0));
+      }
     });
   });
 }

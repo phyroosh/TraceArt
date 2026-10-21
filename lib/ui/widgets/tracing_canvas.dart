@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/image_processing_service.dart';
 import '../../viewmodels/tracing_viewmodel.dart';
+import 'grid_painter.dart';
 
 /// The core canvas component rendering the reference image.
 /// When [viewModel.isLocked] is true:
@@ -76,7 +77,18 @@ class TracingCanvas extends StatelessWidget {
       height: effectiveSize.height,
       child: RotatedBox(
         quarterTurns: viewModel.quarterTurns,
-        child: imageContent,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            imageContent,
+            if (viewModel.isGridEnabled)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: GridPainter(config: viewModel.gridConfig),
+                ),
+              ),
+          ],
+        ),
       ),
     );
 
